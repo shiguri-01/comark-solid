@@ -1,0 +1,51 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to publish (for example, v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.19.0
+        with:
+          node-version: 24.21.0
+          cache: true
+          run-install: false
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Check
+        run: vp run check
+
+      - name: Test
+        run: vp run test
+
+      - name: Stage package for npm publishing
+        run: vp pm stage publish --provenance -- --no-git-checks
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "$RELEASE_TAG"

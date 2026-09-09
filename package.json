@@ -1,0 +1,76 @@
+{
+  "name": "comark-solid",
+  "version": "0.0.1",
+  "description": "Solid renderer for Comark.",
+  "keywords": [
+    "comark",
+    "markdown",
+    "solid",
+    "solidjs"
+  ],
+  "homepage": "https://github.com/shiguri-01/comark-solid#readme",
+  "bugs": {
+    "url": "https://github.com/shiguri-01/comark-solid/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "shiguri",
+    "url": "https://github.com/shiguri-01"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shiguri-01/comark-solid.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build",
+    "prepare": "vp config",
+    "bump": "bumpp"
+  },
+  "devDependencies": {
+    "@solidjs/testing-library": "^1.0.0-beta.3",
+    "@solidjs/vite-plugin": "^3.0.0-next.39",
+    "@solidjs/web": "2.0.0-rc.6",
+    "@testing-library/jest-dom": "^7.0.1",
+    "bumpp": "^11.1.0",
+    "comark": "^0.6.2",
+    "eslint-plugin-solid": "~0.18.0",
+    "jsdom": "^30.0.1",
+    "solid-js": "^2.0.0-rc.6",
+    "typescript": "^7.0.2",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "peerDependencies": {
+    "@solidjs/web": "^2.0.0-rc.6",
+    "comark": "^0.6.2",
+    "solid-js": "^2.0.0-rc.6"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.3.4",
+      "onFail": "download"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "24.21.0",
+      "onFail": "download"
+    }
+  }
+}
