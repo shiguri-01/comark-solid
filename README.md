@@ -5,7 +5,7 @@ Solid renderer for [Comark](https://comark.dev).
 > [!WARNING]
 > **Pre-release: Solid 2.0 RC**
 >
-> This package targets the Solid 2.0 RC versions of `solid-js` and `@solidjs/web`. Solid 2.0 is not stable yet, so bugs and compatibility issues may occur. Test before using it in production. See the [official RC announcement](https://github.com/solidjs/solid/discussions/2995).
+> This package targets the Solid 2.0 RC versions of `solid-js` and `@solidjs/web`. Solid 2.0 is not stable yet, so bugs and compatibility issues may occur.
 
 ## Installation
 
