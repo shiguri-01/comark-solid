@@ -42,10 +42,10 @@ jobs:
         run: vp run test
 
       - name: Stage package for npm publishing
-        run: vp pm stage publish --provenance -- --no-git-checks
+        run: vp pm stage publish --tag next --provenance -- --no-git-checks
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "$RELEASE_TAG"
+        run: gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "$RELEASE_TAG" --prerelease --latest=false

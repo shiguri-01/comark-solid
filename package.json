@@ -31,7 +31,8 @@
     "./package.json": "./package.json"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "next"
   },
   "scripts": {
     "build": "vp pack",
