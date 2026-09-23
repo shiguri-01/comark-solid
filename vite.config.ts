@@ -1,12 +1,12 @@
-import solidPlugin from "@solidjs/vite-plugin";
-import solidEslint from "eslint-plugin-solid/configs/v2";
+import solidEslint from "eslint-plugin-solid/configs/typescript";
+import solidPlugin from "vite-plugin-solid";
 import { defineConfig, lazyPlugins } from "vite-plus";
 
 export default defineConfig({
   staged: {
     "*": "vp check --fix",
   },
-  plugins: lazyPlugins(() => [solidPlugin()]),
+  plugins: lazyPlugins(() => [solidPlugin({ hot: false })]),
   pack: {
     platform: "neutral",
     plugins: [
@@ -21,7 +21,6 @@ export default defineConfig({
   },
   lint: {
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }, "eslint-plugin-solid"],
-    settings: solidEslint.settings,
     rules: { "vite-plus/prefer-vite-plus-imports": "error", ...solidEslint.rules },
     options: {
       typeAware: true,

@@ -1,7 +1,6 @@
 import { render, screen } from "@solidjs/testing-library";
-import type { JSX } from "@solidjs/web";
 import type { MarkdownDocument as MarkdownDocumentType } from "comark";
-import { lazy, type Component } from "solid-js";
+import { lazy, type Component, type JSX } from "solid-js";
 import { describe, expect, it } from "vite-plus/test";
 
 import { MarkdownDocument } from "../src/components/MarkdownDocument";

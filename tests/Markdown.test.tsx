@@ -1,18 +1,17 @@
 import { render, screen } from "@solidjs/testing-library";
-import type { JSX } from "@solidjs/web";
 import { parseMarkdown } from "comark";
-import { createSignal, flush, lazy, Loading, type Component } from "solid-js";
+import { createSignal, lazy, Suspense, type Component, type JSX } from "solid-js";
 import { describe, expect, it } from "vite-plus/test";
 
 import { Markdown } from "../src/components/Markdown";
 
 describe("Markdown component", () => {
   describe("String input and parsing", () => {
-    it("parses and renders markdown string with Loading boundary", async () => {
+    it("parses and renders markdown string with Suspense boundary", async () => {
       render(() => (
-        <Loading fallback={<div class="loading">Loading...</div>}>
+        <Suspense fallback={<div class="loading">Loading...</div>}>
           <Markdown value={"# Title\n\nThis is a paragraph with **bold** text."} />
-        </Loading>
+        </Suspense>
       ));
 
       const heading = await screen.findByRole("heading", { level: 1 });
@@ -34,9 +33,9 @@ const x = 1;
 \`\`\`
 `;
       const { container } = render(() => (
-        <Loading fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div>Loading...</div>}>
           <Markdown value={markdown} />
-        </Loading>
+        </Suspense>
       ));
 
       const items = await screen.findAllByRole("listitem");
@@ -74,9 +73,9 @@ const x = 1;
       });
 
       render(() => (
-        <Loading fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div>Loading...</div>}>
           <Markdown value="Hello" options={{ plugins: [testPlugin()] }} />
-        </Loading>
+        </Suspense>
       ));
 
       await screen.findByText("Hello");
@@ -91,9 +90,9 @@ const x = 1;
       );
 
       render(() => (
-        <Loading fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div>Loading...</div>}>
           <Markdown value="# Custom H1" components={{ h1: CustomHeading }} />
-        </Loading>
+        </Suspense>
       ));
 
       const heading = await screen.findByRole("heading", { level: 1 });
@@ -103,9 +102,9 @@ const x = 1;
 
     it("forwards class prop to wrapper element", async () => {
       const { container } = render(() => (
-        <Loading fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div>Loading...</div>}>
           <Markdown value="Simple text" class="theme-dark padded" />
-        </Loading>
+        </Suspense>
       ));
 
       await screen.findByText("Simple text");
@@ -149,9 +148,9 @@ const x = 1;
       parsedDoc.nodes = [["lazy-alert", {}, "Dynamic lazy alert content"]];
 
       render(() => (
-        <Loading fallback={<div>Loading alert...</div>}>
+        <Suspense fallback={<div>Loading alert...</div>}>
           <Markdown value={parsedDoc} components={{ "lazy-alert": LazyAlert }} />
-        </Loading>
+        </Suspense>
       ));
 
       const alert = await screen.findByRole("alert");
@@ -165,9 +164,9 @@ const x = 1;
       const [source, setSource] = createSignal("# Initial");
 
       render(() => (
-        <Loading fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div>Loading...</div>}>
           <Markdown value={source()} />
-        </Loading>
+        </Suspense>
       ));
 
       const initialHeading = await screen.findByRole("heading", { name: "Initial" });
@@ -183,16 +182,15 @@ const x = 1;
       const [cls, setCls] = createSignal("theme-light");
 
       const { container } = render(() => (
-        <Loading fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div>Loading...</div>}>
           <Markdown value="Text" class={cls()} />
-        </Loading>
+        </Suspense>
       ));
 
       await screen.findByText("Text");
       expect(container.firstElementChild).toHaveClass("comark-content", "theme-light");
 
       setCls("theme-dark");
-      flush();
 
       expect(container.firstElementChild).toHaveClass("comark-content", "theme-dark");
     });

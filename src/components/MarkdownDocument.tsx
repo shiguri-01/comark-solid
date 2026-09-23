@@ -1,7 +1,14 @@
-import { dynamic, type JSX } from "@solidjs/web";
 import type { MarkdownDocument as MarkdownDocumentType, Node, NodeRenderData } from "comark";
 import { resolveAttributes } from "comark/utils";
-import { createMemo, merge, Loading, type Component, type ValidComponent } from "solid-js";
+import {
+  createMemo,
+  mergeProps,
+  Suspense,
+  type Component,
+  type JSX,
+  type ValidComponent,
+} from "solid-js";
+import { Dynamic } from "solid-js/web";
 
 import { getAttributes, getChildren, getTag } from "../utils/ast";
 
@@ -132,32 +139,29 @@ function createNodeRenderer(components: Record<string, ValidComponent>) {
       Object.keys(props).length > 0 ? { ...context.renderData, props } : context.renderData;
 
     const slots = partitionIntoSlots(node, childRenderData);
-    const CustomComponent = dynamic(() => component);
-
     return (
-      // Loadingで囲うことで、CustomComponent内の非同期値の表示が外部に影響しないようにする
-      // CustomComponent内で既にLoadingでラップされている場合、
-      // 読込中は内側のLoading.fallbackが表示されるので、このケースでもいい感じに動作する
-      <Loading fallback={null}>
-        <CustomComponent {...props} {...slots} />
-      </Loading>
+      <Suspense fallback={null}>
+        <Dynamic component={component} {...props} {...slots} />
+      </Suspense>
     );
   }
 
   function renderNativeElement(element: ElementNode, context: LocalContext) {
     const { tag, node } = element;
     const props = resolveProps(node, context.renderData);
-    const Component = dynamic(() => tag);
-
     if (VOID_ELEMENTS.has(tag)) {
-      return <Component {...props} />;
+      return <Dynamic component={tag} {...props} />;
     }
 
     const children = getChildren(node)
       .map((child) => renderNode(child, { ...context, parent: node }))
       .filter(Boolean);
 
-    return <Component {...props}>{children}</Component>;
+    return (
+      <Dynamic component={tag} {...props}>
+        {children}
+      </Dynamic>
+    );
   }
 
   function partitionIntoSlots(
@@ -222,7 +226,7 @@ function createNodeRenderer(components: Record<string, ValidComponent>) {
  *  ```
  */
 export const MarkdownDocument: Component<MarkdownDocumentProps> = (_props) => {
-  const props = merge({ components: {}, data: {}, class: undefined }, _props);
+  const props = mergeProps({ components: {}, data: {}, class: undefined }, _props);
 
   const renderedNodes = createMemo(() => {
     const renderNode = createNodeRenderer(props.components);

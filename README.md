@@ -2,11 +2,6 @@
 
 Solid renderer for [Comark](https://comark.dev).
 
-> [!WARNING]
-> **Pre-release: Solid 2.0 RC**
->
-> This package targets the Solid 2.0 RC versions of `solid-js` and `@solidjs/web`. Solid 2.0 is not stable yet, so bugs and compatibility issues may occur.
-
 ## Installation
 
 ```bash
@@ -17,13 +12,20 @@ npm install comark-solid comark
 
 Parses Markdown strings and renders them directly.
 
+String input is parsed asynchronously. Wrap the component in Solid's `Suspense` to show a fallback while parsing.
+
 ```tsx
 import { Markdown } from "comark-solid";
+import { Suspense } from "solid-js";
 
 const markdown = "# Hello World";
 
 export default function App() {
-  return <Markdown value={markdown} />;
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Markdown value={markdown} />
+    </Suspense>
+  );
 }
 ```
 

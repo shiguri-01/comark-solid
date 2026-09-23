@@ -1,7 +1,14 @@
 import { parseMarkdown } from "comark";
 import type { MarkdownDocument as MarkdownDocumentType, ParserOptions } from "comark";
 import { isMarkdownDocument } from "comark/utils";
-import { createMemo, merge, type Component, type ValidComponent } from "solid-js";
+import {
+  createMemo,
+  createResource,
+  mergeProps,
+  Show,
+  type Component,
+  type ValidComponent,
+} from "solid-js";
 
 import { MarkdownDocument, type MarkdownDocumentProps } from "./MarkdownDocument";
 
@@ -58,7 +65,7 @@ export interface MarkdownProps extends Omit<MarkdownDocumentProps, "value"> {
  * @example
  * ```tsx
  * import { Markdown } from "comark-solid";
- * import { Loading } from "solid-js";
+ * import { Suspense } from "solid-js";
  * import { CustomHeading } from "./CustomHeading";
  *
  * const components = {
@@ -67,30 +74,39 @@ export interface MarkdownProps extends Omit<MarkdownDocumentProps, "value"> {
  *
  * export default function App() {
  *   return (
- *     <Loading fallback={<div>Loading...</div>}>
+ *     <Suspense fallback={<div>Loading...</div>}>
  *       <Markdown
  *         value={source}
  *         components={components}
  *       />
- *     </Loading>
+ *     </Suspense>
  *   );
  * }
  * ```
  */
 export const Markdown: Component<MarkdownProps> = (_props) => {
-  const props = merge({ components: {}, data: {} }, _props);
+  const props = mergeProps({ components: {}, data: {} }, _props);
+
+  const [parsed] = createResource(
+    () => (typeof props.value === "string" ? ([props.value, props.options] as const) : null),
+    ([value, options]) => parseMarkdown(value, options),
+  );
 
   const document = createMemo(() => {
     const value = props.value;
-    return isMarkdownDocument(value) ? value : parseMarkdown(value as string, props.options);
+    return isMarkdownDocument(value) ? value : parsed();
   });
 
   return (
-    <MarkdownDocument
-      value={document()}
-      components={props.components}
-      data={props.data}
-      class={props.class}
-    />
+    <Show when={document()}>
+      {(value: () => MarkdownDocumentType) => (
+        <MarkdownDocument
+          value={value()}
+          components={props.components}
+          data={props.data}
+          class={props.class}
+        />
+      )}
+    </Show>
   );
 };
