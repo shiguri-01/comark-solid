@@ -45,14 +45,14 @@
   },
   "devDependencies": {
     "@solidjs/testing-library": "^1.0.0-beta.3",
-    "@solidjs/vite-plugin": "^3.0.0-next.39",
-    "@solidjs/web": "2.0.0-rc.6",
+    "@solidjs/vite-plugin": "^3.0.0-next.47",
+    "@solidjs/web": "2.0.0-rc.13",
     "@testing-library/jest-dom": "^7.0.1",
     "bumpp": "^11.1.0",
     "comark": "^0.6.2",
-    "eslint-plugin-solid": "~0.18.0",
+    "eslint-plugin-solid": "~0.18.1",
     "jsdom": "^30.0.1",
-    "solid-js": "^2.0.0-rc.6",
+    "solid-js": "2.0.0-rc.13",
     "typescript": "^7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"
