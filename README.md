@@ -107,7 +107,7 @@ Use the `:` prefix to pass typed values:
 ### Slots
 
 The default slot is passed as `children`.
-Named slots (e.g. `#header`) are passed as camelCase props prefixed with `slot` (`slotHeader`).
+Named slots (e.g. `#header`) are passed as props prefixed with `slot` (`slotHeader`).
 
 ```markdown
 ::card
