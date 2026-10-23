@@ -46,7 +46,7 @@
     "@solidjs/testing-library": "^0.8.10",
     "@testing-library/jest-dom": "^7.0.1",
     "bumpp": "^11.1.0",
-    "comark": "^0.6.2",
+    "comark": "^0.8.1",
     "eslint-plugin-solid": "~0.18.0",
     "jsdom": "^30.0.1",
     "solid-js": "^1.9.15",
@@ -56,7 +56,7 @@
     "vite-plus": "catalog:"
   },
   "peerDependencies": {
-    "comark": "^0.6.2",
+    "comark": "^0.8.1",
     "solid-js": "^1.9.0"
   },
   "devEngines": {

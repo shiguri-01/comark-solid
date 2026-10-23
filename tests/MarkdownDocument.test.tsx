@@ -1,5 +1,6 @@
 import { render, screen } from "@solidjs/testing-library";
 import type { MarkdownDocument as MarkdownDocumentType } from "comark";
+import { parseMarkdown } from "comark";
 import { lazy, type Component, type JSX } from "solid-js";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -45,6 +46,26 @@ describe("MarkdownDocument component", () => {
   });
 
   describe("Native HTML elements rendering", () => {
+    it("maps fenced code metadata to native data attributes", async () => {
+      const doc = await parseMarkdown("```js [demo.js] {1,3}\nconst x = 1;\n```");
+      const { container } = render(() => <MarkdownDocument value={doc} />);
+      const pre = container.querySelector("pre");
+      expect(pre).toHaveAttribute("data-language", "js");
+      expect(pre).toHaveAttribute("data-filename", "demo.js");
+      expect(pre).toHaveAttribute("data-highlights", "[1,3]");
+      expect(pre).not.toHaveAttribute("language");
+      expect(pre).not.toHaveAttribute("highlights");
+    });
+
+    it("preserves authored HTML pre attributes and hides internal metadata", async () => {
+      const doc = await parseMarkdown('<pre language="authored">raw</pre>');
+      const { container } = render(() => <MarkdownDocument value={doc} />);
+      const pre = container.querySelector("pre");
+      expect(pre).toHaveAttribute("language", "authored");
+      expect(pre).not.toHaveAttribute("data-language");
+      expect(pre?.getAttributeNames()).not.toContain("$");
+    });
+
     it("renders headings, paragraphs, and inline formatting", () => {
       const doc = createDoc([
         ["h1", { id: "title" }, "Heading 1"],
@@ -133,6 +154,40 @@ describe("MarkdownDocument component", () => {
   });
 
   describe("Custom components", () => {
+    it("keeps code in a custom pre default slot native", () => {
+      const Pre: Component<{ children?: JSX.Element }> = (props) => <pre>{props.children}</pre>;
+      const doc = createDoc([["pre", {}, ["template", { name: "default" }, ["code", {}, "code"]]]]);
+      const { container } = render(() => (
+        <MarkdownDocument value={doc} components={{ Pre, Code: () => "replaced" }} />
+      ));
+      expect(container.querySelector("pre code")).toHaveTextContent("code");
+    });
+
+    it("prefers ProsePre over Pre and pre and passes typed code block props", async () => {
+      const doc = await parseMarkdown("```js [demo.js] {1,3}\ncode\n```");
+      const Code: Component<{ language: string; highlights: number[] }> = (props) => (
+        <output>
+          {props.language}:{props.highlights.join(",")}
+        </output>
+      );
+      render(() => (
+        <MarkdownDocument
+          value={doc}
+          components={{ ProsePre: Code, Pre: () => "wrong", pre: () => "wrong" }}
+        />
+      ));
+      expect(screen.getByRole("status")).toHaveTextContent("js:1,3");
+    });
+
+    it("resolves alert as attributes using PascalCase components", async () => {
+      const doc = await parseMarkdown("> [!NOTE]\n> Hello");
+      const Note: Component<{ children?: JSX.Element }> = (props) => (
+        <aside>{props.children}</aside>
+      );
+      render(() => <MarkdownDocument value={doc} components={{ Note }} />);
+      expect(screen.getByRole("complementary")).toHaveTextContent("Hello");
+    });
+
     it("renders mapped custom components instead of native elements", () => {
       const CustomCard: Component<{ title: string; children?: JSX.Element }> = (props) => (
         <article class="custom-card" aria-label={props.title}>
@@ -219,6 +274,22 @@ describe("MarkdownDocument component", () => {
   });
 
   describe("Slots partitioning", () => {
+    it("passes template #header content as the slotHeader prop", () => {
+      const Card: Component<{ slotHeader?: JSX.Element }> = (props) => (
+        <header>{props.slotHeader}</header>
+      );
+      const doc = createDoc([["card", {}, ["template", { "#header": "" }, "Header"]]]);
+      render(() => <MarkdownDocument value={doc} components={{ Card }} />);
+      expect(screen.getByRole("banner")).toHaveTextContent("Header");
+    });
+
+    it("omits named slot templates from native elements", () => {
+      const doc = createDoc([["div", {}, ["template", { name: "hidden" }, "Hidden"], "Visible"]]);
+      render(() => <MarkdownDocument value={doc} />);
+      expect(screen.getByText("Visible")).toBeInTheDocument();
+      expect(screen.queryByText("Hidden")).toBeNull();
+    });
+
     it("passes default children and named slots to custom component", () => {
       const LayoutComponent: Component<{
         children?: JSX.Element;
@@ -314,6 +385,42 @@ describe("MarkdownDocument component", () => {
   });
 
   describe("Data binding and prop resolution", () => {
+    it("preserves literal strings and resolves typed prop bindings", async () => {
+      const doc = await parseMarkdown(':probe{count="42" :active="false" :items=\'[1,2]\'}');
+      const Probe: Component<Record<string, unknown>> = (props) => (
+        <output>
+          {JSON.stringify({ count: props.count, active: props.active, items: props.items })}
+        </output>
+      );
+      render(() => <MarkdownDocument value={doc} components={{ Probe }} />);
+      expect(JSON.parse(screen.getByRole("status").textContent ?? "null")).toEqual({
+        count: "42",
+        active: false,
+        items: [1, 2],
+      });
+    });
+
+    it("does not inherit outer props when an element's own attributes are removed", () => {
+      const doc = createDoc([
+        [
+          "div",
+          { title: "outer" },
+          ["section", { innerHTML: "ignored" }, ["span", { ":title": "props.title" }, "child"]],
+        ],
+      ]);
+      const { container } = render(() => <MarkdownDocument value={doc} />);
+      expect(container.querySelector("span")).not.toHaveAttribute("title");
+      expect(container.querySelector("section")).toHaveTextContent("child");
+    });
+
+    it("resolves descendant prop bindings using the parent's original attributes", () => {
+      const doc = createDoc([
+        ["pre", { language: "js" }, ["code", { ":title": "props.language" }, "code"]],
+      ]);
+      const { container } = render(() => <MarkdownDocument value={doc} />);
+      expect(container.querySelector("code")).toHaveAttribute("title", "js");
+    });
+
     it("resolves dynamic data attributes prefixed with colon", () => {
       const UserCard: Component<{ name?: string; age?: number }> = (props) => (
         <div class="user-card" aria-label="user-info">
@@ -360,6 +467,11 @@ describe("MarkdownDocument component", () => {
   });
 
   describe("Edge cases and resilience", () => {
+    it("omits comment nodes from rendered content", () => {
+      const doc = createDoc([[null, {}, "comment"]]);
+      const { container } = render(() => <MarkdownDocument value={doc} />);
+      expect(container.firstElementChild).toBeEmptyDOMElement();
+    });
     it("renders safely when nodes array is empty", () => {
       const doc = createDoc([]);
       const { container } = render(() => <MarkdownDocument value={doc} />);

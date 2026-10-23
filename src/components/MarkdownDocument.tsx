@@ -1,5 +1,5 @@
 import type { MarkdownDocument as MarkdownDocumentType, Node, NodeRenderData } from "comark";
-import { resolveAttributes } from "comark/utils";
+import { isHtmlVoidElement, pascalCase, resolveAttributes, toNativeAttributes } from "comark/utils";
 import {
   createMemo,
   mergeProps,
@@ -73,10 +73,14 @@ type ComponentNode = ElementNode & {
   readonly component: ValidComponent;
 };
 
-const VOID_ELEMENTS = new Set(["hr", "br", "img"]);
-
 function resolveProps(node: Node, renderData: NodeRenderData) {
   return resolveAttributes(getAttributes(node), renderData, { parseJson: true });
+}
+
+function scopeRenderData(node: Node, props: Record<string, unknown>, renderData: NodeRenderData) {
+  return Object.keys(getAttributes(node)).some((key) => key !== "$")
+    ? { ...renderData, props }
+    : renderData;
 }
 
 function getSlotName(node: Node): string | null {
@@ -85,11 +89,16 @@ function getSlotName(node: Node): string | null {
   }
 
   const props = getAttributes(node);
-  if (typeof props.name !== "string" || props.name.trim() === "") {
+  const name =
+    props.name ||
+    Object.keys(props)
+      .find((key) => key.startsWith("#"))
+      ?.slice(1);
+  if (typeof name !== "string" || name.trim() === "") {
     return null;
   }
 
-  return props.name.trim();
+  return name.trim();
 }
 
 function getSlotPropName(slotName: string): string {
@@ -104,7 +113,12 @@ function resolveComponent(
   element: ElementNode,
   components: Record<string, ValidComponent>,
 ): ComponentNode | null {
-  const component = components[element.tag];
+  function lookup(tag: string) {
+    const name = pascalCase(tag);
+    return components[`Prose${name}`] || components[name] || components[tag];
+  }
+  const as = getAttributes(element.node).as;
+  const component = (typeof as === "string" && lookup(as)) || lookup(element.tag);
   if (!component) return null;
 
   return { ...element, component };
@@ -135,8 +149,7 @@ function createNodeRenderer(components: Record<string, ValidComponent>) {
   function renderCustomComponent(element: ComponentNode, context: LocalContext) {
     const { component, node } = element;
     const props = resolveProps(node, context.renderData);
-    const childRenderData =
-      Object.keys(props).length > 0 ? { ...context.renderData, props } : context.renderData;
+    const childRenderData = scopeRenderData(node, props, context.renderData);
 
     const slots = partitionIntoSlots(node, childRenderData);
     return (
@@ -148,13 +161,17 @@ function createNodeRenderer(components: Record<string, ValidComponent>) {
 
   function renderNativeElement(element: ElementNode, context: LocalContext) {
     const { tag, node } = element;
-    const props = resolveProps(node, context.renderData);
-    if (VOID_ELEMENTS.has(tag)) {
+    const resolved = resolveProps(node, context.renderData);
+    const props = toNativeAttributes(tag, node, resolved);
+    const renderData = scopeRenderData(node, resolved, context.renderData);
+
+    if (isHtmlVoidElement(tag)) {
       return <Dynamic component={tag} {...props} />;
     }
 
     const children = getChildren(node)
-      .map((child) => renderNode(child, { ...context, parent: node }))
+      .filter((child) => !getSlotName(child))
+      .map((child) => renderNode(child, { parent: node, renderData }))
       .filter(Boolean);
 
     return (
@@ -182,7 +199,7 @@ function createNodeRenderer(components: Record<string, ValidComponent>) {
       if (slotName) {
         const propName = getSlotPropName(slotName);
         namedSlots[propName] = getChildren(child)
-          .map((slotChild) => renderNode(slotChild, { parent: child, renderData: childRenderData }))
+          .map((slotChild) => renderNode(slotChild, { parent: node, renderData: childRenderData }))
           .filter(Boolean);
 
         continue;
