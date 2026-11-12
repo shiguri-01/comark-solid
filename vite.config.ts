@@ -8,6 +8,12 @@ export default defineConfig({
   },
   plugins: lazyPlugins(() => [solidPlugin()]),
   pack: {
+    deps: {
+      // tsdown <0.23 compatibility: resolve external dependency subpaths.
+      // Remove to preserve subpath imports as written (the new default).
+      // https://tsdown.dev/options/dependencies#deps-resolvedepsubpath
+      resolveDepSubpath: true,
+    },
     platform: "neutral",
     plugins: [
       solidPlugin({
@@ -15,7 +21,7 @@ export default defineConfig({
       }),
     ],
     dts: {
-      tsgo: true,
+      generator: "tsgo",
     },
     exports: true,
   },
@@ -30,6 +36,11 @@ export default defineConfig({
   },
   fmt: { sortImports: true },
   test: {
+    // Vitest v4 compatibility: preserve mock call history.
+    // Remove after tests no longer rely on calls from setup or earlier tests.
+    // https://viteplus.dev/guide/vitest-v5#remove-unneeded-compatibility-settings
+    // https://vitest.dev/guide/migration/#clearmocks-is-enabled-by-default
+    clearMocks: false,
     environment: "jsdom",
     globals: false,
     setupFiles: ["./vitest-setup.ts"],

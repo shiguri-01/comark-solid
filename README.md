@@ -67,6 +67,7 @@ Map tag to Solid components via the `components` prop:
 
 ```tsx
 import { Markdown } from "comark-solid";
+
 import { Card } from "./Card";
 import { CustomHeading } from "./CustomHeading";
 
