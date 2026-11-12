@@ -17,7 +17,7 @@ export default defineConfig({
     platform: "neutral",
     plugins: [
       solidPlugin({
-        hot: false,
+        refresh: false,
       }),
     ],
     dts: {
