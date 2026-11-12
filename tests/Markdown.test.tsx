@@ -8,6 +8,18 @@ import { Markdown } from "../src/components/Markdown";
 
 describe("Markdown component", () => {
   describe("String input and parsing", () => {
+    it("forwards node transforms when parsing markdown", async () => {
+      render(() => (
+        <Loading fallback={null}>
+          <Markdown
+            value="# Title"
+            transformNode={({ tag }) => (tag === "h1" ? { tag: "h2" } : undefined)}
+          />
+        </Loading>
+      ));
+      expect(await screen.findByRole("heading", { level: 2 })).toHaveTextContent("Title");
+    });
+
     it("parses and renders markdown string with Loading boundary", async () => {
       render(() => (
         <Loading fallback={<div class="loading">Loading...</div>}>

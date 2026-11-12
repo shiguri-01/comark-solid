@@ -90,6 +90,7 @@ export const Markdown: Component<MarkdownProps> = (_props) => {
       value={document()}
       components={props.components}
       data={props.data}
+      transformNode={props.transformNode}
       class={props.class}
     />
   );

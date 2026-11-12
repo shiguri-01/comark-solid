@@ -29,13 +29,14 @@ export default function App() {
 
 ### Props
 
-| Prop         | Type                             | Default      | Description                                                                        |
-| :----------- | :------------------------------- | :----------- | :--------------------------------------------------------------------------------- |
-| `value`      | `string \| MarkdownDocument`     | _(Required)_ | Markdown string or pre-parsed document.                                            |
-| `options`    | `ParserOptions`                  | `undefined`  | Options passed to `parseMarkdown` (ignored if `value` is a `MarkdownDocument`).    |
-| `components` | `Record<string, ValidComponent>` | `{}`         | Map of AST node names to Solid components.                                         |
-| `data`       | `Record<string, unknown>`        | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                   |
-| `class`      | `string`                         | `undefined`  | Additional class name for the wrapper `div` (`comark-content` is always included). |
+| Prop            | Type                                        | Default      | Description                                                                        |
+| :-------------- | :------------------------------------------ | :----------- | :--------------------------------------------------------------------------------- |
+| `value`         | `string \| MarkdownDocument`                | _(Required)_ | Markdown string or pre-parsed document.                                            |
+| `options`       | `ParserOptions`                             | `undefined`  | Options passed to `parseMarkdown` (ignored if `value` is a `MarkdownDocument`).    |
+| `transformNode` | `NodeTransform \| readonly NodeTransform[]` | `undefined`  | Transform resolved element tags and props before rendering.                        |
+| `components`    | `Record<string, ValidComponent>`            | `{}`         | Map of AST node names to Solid components.                                         |
+| `data`          | `Record<string, unknown>`                   | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                   |
+| `class`         | `string`                                    | `undefined`  | Additional class name for the wrapper `div` (`comark-content` is always included). |
 
 ## `<MarkdownDocument>`
 
@@ -54,12 +55,32 @@ export default function App() {
 
 ### Props
 
-| Prop         | Type                             | Default      | Description                                                                        |
-| :----------- | :------------------------------- | :----------- | :--------------------------------------------------------------------------------- |
-| `value`      | `MarkdownDocument`               | _(Required)_ | Pre-parsed Comark document AST.                                                    |
-| `components` | `Record<string, ValidComponent>` | `{}`         | Map of AST node names to Solid components.                                         |
-| `data`       | `Record<string, unknown>`        | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                   |
-| `class`      | `string`                         | `undefined`  | Additional class name for the wrapper `div` (`comark-content` is always included). |
+| Prop            | Type                                        | Default      | Description                                                                        |
+| :-------------- | :------------------------------------------ | :----------- | :--------------------------------------------------------------------------------- |
+| `value`         | `MarkdownDocument`                          | _(Required)_ | Pre-parsed Comark document AST.                                                    |
+| `transformNode` | `NodeTransform \| readonly NodeTransform[]` | `undefined`  | Transform resolved element tags and props before rendering.                        |
+| `components`    | `Record<string, ValidComponent>`            | `{}`         | Map of AST node names to Solid components.                                         |
+| `data`          | `Record<string, unknown>`                   | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                   |
+| `class`         | `string`                                    | `undefined`  | Additional class name for the wrapper `div` (`comark-content` is always included). |
+
+## Node transforms
+
+Use `transformNode` to change an element's tag or props before rendering:
+
+```tsx
+import { Markdown } from "comark-solid";
+
+export default function App() {
+  return (
+    <Markdown
+      value="# Hello World"
+      transformNode={({ tag }) => (tag === "h1" ? { tag: "h2" } : undefined)}
+    />
+  );
+}
+```
+
+Transforms run in order after attribute resolution and before component lookup. Their output is trusted developer code and is not sanitized by Comark.
 
 ## Custom Components
 

@@ -16,6 +16,43 @@ function createDoc(nodes: MarkdownDocumentType["nodes"]): MarkdownDocumentType {
 }
 
 describe("MarkdownDocument component", () => {
+  it("applies ordered transforms before component lookup and scopes transformed props to children", () => {
+    const doc = createDoc([["badge", {}, ["span", { ":title": "props.tone" }]]]);
+    const Pill: Component<{ tone?: string; children?: JSX.Element }> = (props) => (
+      <section data-tone={props.tone}>{props.children}</section>
+    );
+    const { container } = render(() => (
+      <MarkdownDocument
+        value={doc}
+        components={{ pill: Pill }}
+        transformNode={[
+          ({ tag }) => (tag === "badge" ? { tag: "pill" } : undefined),
+          ({ tag, props }) => (tag === "pill" ? { props: { ...props, tone: "info" } } : undefined),
+        ]}
+      />
+    ));
+    expect(container.querySelector('section[data-tone="info"] span')).toHaveAttribute(
+      "title",
+      "info",
+    );
+  });
+
+  it("renders transformed native void elements without children", () => {
+    const doc = createDoc([["p", {}, "ignored"]]);
+    const { container } = render(() => (
+      <MarkdownDocument
+        value={doc}
+        transformNode={({ tag }) =>
+          tag === "p"
+            ? { tag: "input", props: { placeholder: "test", children: "ignored" } }
+            : undefined
+        }
+      />
+    ));
+    expect(container.querySelector("input")).toHaveAttribute("placeholder", "test");
+    expect(container).not.toHaveTextContent("ignored");
+  });
+
   describe("Wrapper div and class handling", () => {
     it("renders container div with comark-content class by default", () => {
       const doc = createDoc([["p", {}, "Hello"]]);

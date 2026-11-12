@@ -1,6 +1,18 @@
 import { dynamic, type JSX } from "@solidjs/web";
-import type { MarkdownDocument as MarkdownDocumentType, Node, NodeRenderData } from "comark";
-import { isHtmlVoidElement, pascalCase, resolveAttributes, toNativeAttributes } from "comark/utils";
+import type {
+  ElementNode as ComarkElementNode,
+  MarkdownDocument as MarkdownDocumentType,
+  Node,
+  NodeRenderData,
+  NodeTransform,
+} from "comark";
+import {
+  applyNodeTransforms,
+  isHtmlVoidElement,
+  pascalCase,
+  resolveAttributes,
+  toNativeAttributes,
+} from "comark/utils";
 import { createMemo, merge, Loading, type Component, type ValidComponent } from "solid-js";
 
 import { getAttributes, getChildren, getTag } from "../utils/ast";
@@ -28,6 +40,9 @@ export interface MarkdownDocumentProps {
    */
   data?: Record<string, unknown>;
 
+  /** Transforms applied to each element after resolving its attributes. */
+  transformNode?: NodeTransform | readonly NodeTransform[];
+
   /**
    * Additional class for the wrapper div.
    *
@@ -51,16 +66,9 @@ const DEFAULT_LOCAL_CONTEXT: LocalContext = {
 type ElementNode = {
   readonly tag: string;
   readonly node: Node;
+  readonly props: Record<string, unknown>;
+  readonly hasTransformedProps: boolean;
 };
-
-function toElementNode(node: Node): ElementNode | null {
-  if (typeof node === "string") return null;
-
-  const tag = getTag(node);
-  if (!tag) return null;
-
-  return { tag, node };
-}
 
 type ComponentNode = ElementNode & {
   readonly component: ValidComponent;
@@ -70,8 +78,13 @@ function resolveProps(node: Node, renderData: NodeRenderData) {
   return resolveAttributes(getAttributes(node), renderData, { parseJson: true });
 }
 
-function scopeRenderData(node: Node, props: Record<string, unknown>, renderData: NodeRenderData) {
-  return Object.keys(getAttributes(node)).some((key) => key !== "$")
+function scopeRenderData(
+  node: Node,
+  props: Record<string, unknown>,
+  renderData: NodeRenderData,
+  hasTransformedProps: boolean,
+) {
+  return hasTransformedProps || Object.keys(getAttributes(node)).some((key) => key !== "$")
     ? { ...renderData, props }
     : renderData;
 }
@@ -110,28 +123,43 @@ function resolveComponent(
     const name = pascalCase(tag);
     return components[`Prose${name}`] || components[name] || components[tag];
   }
-  const as = getAttributes(element.node).as;
+  const as = element.props.as;
   const component = (typeof as === "string" && lookup(as)) || lookup(element.tag);
   if (!component) return null;
 
   return { ...element, component };
 }
 
-function createNodeRenderer(components: Record<string, ValidComponent>) {
+function createNodeRenderer(
+  components: Record<string, ValidComponent>,
+  transformNode?: NodeTransform | readonly NodeTransform[],
+) {
   function renderNode(node: Node, local: Partial<LocalContext> = {}): JSX.Element {
     if (typeof node === "string") {
       return node;
     }
 
-    const element = toElementNode(node);
-    if (!element) {
-      return null;
-    }
+    const nodeTag = getTag(node);
+    if (!nodeTag) return null;
 
     const context = { ...DEFAULT_LOCAL_CONTEXT, ...local };
+    const ownProps = resolveProps(node, context.renderData);
+    const transformed = applyNodeTransforms(
+      transformNode,
+      node as ComarkElementNode,
+      ownProps,
+      context.renderData,
+      context.parent as ComarkElementNode | undefined,
+    );
+    const element: ElementNode = {
+      tag: transformed?.tag ?? nodeTag,
+      node,
+      props: transformed?.props ?? ownProps,
+      hasTransformedProps: transformed !== undefined && transformed.props !== ownProps,
+    };
 
     // preタグ内のテキストはそのまま表示する
-    const isInPre = context.parent !== undefined && toElementNode(context.parent)?.tag === "pre";
+    const isInPre = context.parent !== undefined && getTag(context.parent) === "pre";
     const component = isInPre ? null : resolveComponent(element, components);
 
     return component
@@ -141,8 +169,13 @@ function createNodeRenderer(components: Record<string, ValidComponent>) {
 
   function renderCustomComponent(element: ComponentNode, context: LocalContext) {
     const { component, node } = element;
-    const props = resolveProps(node, context.renderData);
-    const childRenderData = scopeRenderData(node, props, context.renderData);
+    const props = element.props;
+    const childRenderData = scopeRenderData(
+      node,
+      props,
+      context.renderData,
+      element.hasTransformedProps,
+    );
 
     const slots = partitionIntoSlots(node, childRenderData);
     const CustomComponent = dynamic(() => component);
@@ -159,13 +192,19 @@ function createNodeRenderer(components: Record<string, ValidComponent>) {
 
   function renderNativeElement(element: ElementNode, context: LocalContext) {
     const { tag, node } = element;
-    const resolved = resolveProps(node, context.renderData);
+    const resolved = element.props;
     const props = toNativeAttributes(tag, node, resolved);
-    const renderData = scopeRenderData(node, resolved, context.renderData);
+    const renderData = scopeRenderData(
+      node,
+      resolved,
+      context.renderData,
+      element.hasTransformedProps,
+    );
     const Component = dynamic(() => tag);
 
     if (isHtmlVoidElement(tag)) {
-      return <Component {...props} />;
+      const { children: _children, ...voidProps } = props;
+      return <Component {...voidProps} />;
     }
 
     const children = getChildren(node)
@@ -241,7 +280,7 @@ export const MarkdownDocument: Component<MarkdownDocumentProps> = (_props) => {
   const props = merge({ components: {}, data: {}, class: undefined }, _props);
 
   const renderedNodes = createMemo(() => {
-    const renderNode = createNodeRenderer(props.components);
+    const renderNode = createNodeRenderer(props.components, props.transformNode);
 
     const document = props.value;
 
