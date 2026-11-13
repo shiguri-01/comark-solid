@@ -18,9 +18,13 @@
  *   NOT invalidate in-flight results — the serialized parser resolves in
  *   call order, so a completed intermediate update is still the newest
  *   *landed* result and is shown while the next parse runs.
- * - Stream end is handled by an optional idle finalize: when the value has
- *   been stable for `finalizeDelayMs`, one non-streaming parse replaces the
- *   last streaming result. Disabled unless a delay is passed.
+ * - There is deliberately NO stream-end handling: in Solid, `value` is
+ *   just a reactive string that may change at any time, so "the stream
+ *   ended" is not a state this component can or should guess at (an idle
+ *   finalize timer existed in an earlier draft and was removed — see
+ *   EXPERIMENT-auto-incremental.md). The only divergence from a full
+ *   parse is a trailing incomplete opener, which resolves on the next
+ *   edit, replacement, or remount.
  * - Errors do NOT throw to an `<Errored>` boundary. Verified on Solid
  *   2.0.0-rc.21: when a memo read in the rendered output throws, the
  *   errored branch's computations are disposed — including this
@@ -54,12 +58,6 @@ export interface MarkdownAutoProps extends Omit<MarkdownDocumentProps, "value"> 
   components?: Record<string, ValidComponent>;
   data?: Record<string, unknown>;
   class?: string;
-  /**
-   * EXPERIMENTAL stream-end handling: idle milliseconds after the last
-   * append before a final non-streaming parse runs. `undefined` disables
-   * finalization (pure auto mode).
-   */
-  finalizeDelayMs?: number;
 }
 
 export const MarkdownAuto: Component<MarkdownAutoProps> = (_props) => {
@@ -74,63 +72,30 @@ export const MarkdownAuto: Component<MarkdownAutoProps> = (_props) => {
 
   // Bumped when the parser instance changes (options identity) —
   // deliberately NOT bumped on value changes (see header). Disposal needs
-  // no bump: the effect cleanup below clears the finalize timer, and
-  // writes to disposed signals are dropped by Solid.
-  // (An earlier draft bumped this in an `onSettled` cleanup; that cleanup
-  // fires when activity settles, which invalidated the idle-finalize timer
-  // and late recoveries — exactly the work that lives past a settle.)
+  // no bump: writes to disposed signals are dropped by Solid.
   let parserGeneration = 0;
   let activeParser: unknown = null;
-
-  // Newest value requested so far. Parse resolutions arrive in call order
-  // (the parser is serialized), so applying every landed result is safe —
-  // but scheduling a finalize for a superseded value is not: its timer
-  // would fire into a newer stream. Finalize is therefore gated on the
-  // value still being the latest, both when scheduled and when fired.
-  let latestValue: string | null = null;
 
   createEffect(
     () => [props.value, props.options] as const,
     ([value]) => {
-      latestValue = value;
       const current = parser();
       if (current !== activeParser) {
         activeParser = current;
         parserGeneration++;
       }
       const gen = parserGeneration;
-      let timer: ReturnType<typeof setTimeout> | undefined;
 
       current.parse(value).then(
         (parsed) => {
           if (gen !== parserGeneration) return;
           setError(null);
           setDocument(parsed);
-
-          if (props.finalizeDelayMs !== undefined && value === latestValue) {
-            timer = setTimeout(() => {
-              if (value !== latestValue) return;
-              current.finalize(value).then(
-                (finalized) => {
-                  if (gen !== parserGeneration || value !== latestValue) return;
-                  setError(null);
-                  setDocument(finalized);
-                },
-                (finalizeError) => {
-                  if (gen === parserGeneration) setError(finalizeError);
-                },
-              );
-            }, props.finalizeDelayMs);
-          }
         },
         (parseError) => {
           if (gen === parserGeneration) setError(parseError);
         },
       );
-
-      return () => {
-        if (timer !== undefined) clearTimeout(timer);
-      };
     },
   );
 

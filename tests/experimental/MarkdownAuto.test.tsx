@@ -217,8 +217,8 @@ describe("MarkdownAuto error handling (effect variant)", () => {
   });
 });
 
-describe("MarkdownAuto stream-end handling (effect variant)", () => {
-  it("without finalizeDelayMs, a trailing opener stays dropped (pure auto mode)", async () => {
+describe("MarkdownAuto pure auto mode (effect variant)", () => {
+  it("a trailing opener stays dropped (no stream-end handling)", async () => {
     const [source, setSource] = createSignal("");
     render(() => (
       <Boundary>
@@ -230,18 +230,6 @@ describe("MarkdownAuto stream-end handling (effect variant)", () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     flush();
     expect(screen.queryByText("Hello **")).not.toBeInTheDocument();
-  });
-
-  it("with finalizeDelayMs, the idle finalize restores exact full-parse rendering", async () => {
-    const [source, setSource] = createSignal("");
-    render(() => (
-      <Boundary>
-        <MarkdownAuto value={source()} finalizeDelayMs={30} />
-      </Boundary>
-    ));
-    setSource("Hello **");
-    expect(await screen.findByText("Hello")).toBeInTheDocument();
-    expect(await screen.findByText("Hello **", {}, { timeout: 2000 })).toBeInTheDocument();
   });
 
   it("rapid synchronous updates coalesce: intermediate values in one flush are never parsed", async () => {

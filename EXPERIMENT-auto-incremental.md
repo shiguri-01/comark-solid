@@ -56,7 +56,10 @@
   - parse が reject したら baseline を進めない（同じ値のリトライが実際に再実行される）。
 - `src/experimental/MarkdownAutoMemo.tsx` — `createDeferred`（非同期メモ）形態。
 - `src/experimental/MarkdownAuto.tsx` — signal + 2引数 `createEffect` 形態
-  （Svelte 版の `$state`/`$effect` の写し）。`finalizeDelayMs` で idle finalize を実装。
+  （Svelte 版の `$state`/`$effect` の写し）。当初は `finalizeDelayMs` prop で
+  idle finalize を実装したが、下記の決定を受けて prop ごと削除済み
+  （2026-11-13）。factory の `finalize()` 自体は明示的に呼ぶ低レベル
+  ユーティリティとしてテストと共に残置。
 
 ## 質問別の検証結果
 
@@ -113,8 +116,10 @@
   そもそもコンポーネントの契約に存在しない。「終わり」はデータを流す側の
   概念であって、描画側がタイマーで推測するものではない。末尾 opener の
   乖離も、値が静止している間だけの話で、次の変更・アンマウント・値の置換の
-  いずれでも全体パースに戻る。A の idle finalize 実験コードとテストは
-  「やればできるが、やらない」という evidence として残す。
+  いずれでも全体パースに戻る。A の idle finalize は「やればできるが、
+  やらない」という evidence として factory の `finalize()` とその単体
+  テストのみ残し、コンポーネントの `finalizeDelayMs` prop とタイマー
+  実装は削除した（2026-11-13、PR #2 のレビュー反映）。
 
 ### 4. 非同期 `createMemo` と `createSerializedMarkdownParser` の組み合わせ — `createDeferred` が適合
 
