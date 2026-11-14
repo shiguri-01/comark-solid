@@ -68,23 +68,6 @@ export default function App() {
 
 Other `div` props, except `children`, are passed to the wrapper element.
 
-## Node transforms
-
-Use `transformNode` to change an element's tag or props before rendering:
-
-```tsx
-import type { NodeTransform } from "comark";
-import { Markdown } from "comark-solid";
-
-const transformNode: NodeTransform = ({ tag }) => (tag === "h1" ? { tag: "h2" } : undefined);
-
-export default function App() {
-  return <Markdown value="# Hello World" transformNode={transformNode} />;
-}
-```
-
-Transforms run in order after attribute resolution and before component lookup. Their output is trusted developer code and is not sanitized by Comark.
-
 ## Custom Components
 
 Map tag to Solid components via the `components` prop:
