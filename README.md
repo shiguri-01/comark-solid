@@ -29,15 +29,17 @@ export default function App() {
 
 ### Props
 
-| Prop            | Type                                        | Default      | Description                                                                        |
-| :-------------- | :------------------------------------------ | :----------- | :--------------------------------------------------------------------------------- |
-| `value`         | `string \| MarkdownDocument`                | _(Required)_ | Markdown string or pre-parsed document.                                            |
-| `options`       | `ParserOptions`                             | `undefined`  | Options for parsing Markdown strings.                                              |
-| `streaming`     | `boolean`                                   | `false`      | Enable streaming mode.                                                             |
-| `transformNode` | `NodeTransform \| readonly NodeTransform[]` | `undefined`  | Transform resolved element tags and props before rendering.                        |
-| `components`    | `Record<string, ValidComponent>`            | `{}`         | Map of AST node names to Solid components.                                         |
-| `data`          | `Record<string, unknown>`                   | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                   |
-| `class`         | `string`                                    | `undefined`  | Additional class name for the wrapper `div` (`comark-content` is always included). |
+| Prop            | Type                                        | Default      | Description                                                                     |
+| :-------------- | :------------------------------------------ | :----------- | :------------------------------------------------------------------------------ |
+| `value`         | `string \| MarkdownDocument`                | _(Required)_ | Markdown string or pre-parsed document.                                         |
+| `options`       | `ParserOptions`                             | `undefined`  | Options for parsing Markdown strings.                                           |
+| `streaming`     | `boolean`                                   | `false`      | Enable streaming mode.                                                          |
+| `transformNode` | `NodeTransform \| readonly NodeTransform[]` | `undefined`  | Transform resolved element tags and props before rendering.                     |
+| `components`    | `Record<string, ValidComponent>`            | `{}`         | Map of AST node names to Solid components.                                      |
+| `data`          | `Record<string, unknown>`                   | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                |
+| `class`         | `JSX.ClassValue`                            | `undefined`  | Additional classes for the wrapper `div` (`comark-content` is always included). |
+
+Other `div` props, except `children`, are passed to the wrapper element.
 
 ## `<MarkdownDocument>`
 
@@ -56,28 +58,28 @@ export default function App() {
 
 ### Props
 
-| Prop            | Type                                        | Default      | Description                                                                        |
-| :-------------- | :------------------------------------------ | :----------- | :--------------------------------------------------------------------------------- |
-| `value`         | `MarkdownDocument`                          | _(Required)_ | Pre-parsed Comark document AST.                                                    |
-| `transformNode` | `NodeTransform \| readonly NodeTransform[]` | `undefined`  | Transform resolved element tags and props before rendering.                        |
-| `components`    | `Record<string, ValidComponent>`            | `{}`         | Map of AST node names to Solid components.                                         |
-| `data`          | `Record<string, unknown>`                   | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                   |
-| `class`         | `string`                                    | `undefined`  | Additional class name for the wrapper `div` (`comark-content` is always included). |
+| Prop            | Type                                        | Default      | Description                                                                     |
+| :-------------- | :------------------------------------------ | :----------- | :------------------------------------------------------------------------------ |
+| `value`         | `MarkdownDocument`                          | _(Required)_ | Pre-parsed Comark document AST.                                                 |
+| `transformNode` | `NodeTransform \| readonly NodeTransform[]` | `undefined`  | Transform resolved element tags and props before rendering.                     |
+| `components`    | `Record<string, ValidComponent>`            | `{}`         | Map of AST node names to Solid components.                                      |
+| `data`          | `Record<string, unknown>`                   | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                |
+| `class`         | `JSX.ClassValue`                            | `undefined`  | Additional classes for the wrapper `div` (`comark-content` is always included). |
+
+Other `div` props, except `children`, are passed to the wrapper element.
 
 ## Node transforms
 
 Use `transformNode` to change an element's tag or props before rendering:
 
 ```tsx
+import type { NodeTransform } from "comark";
 import { Markdown } from "comark-solid";
 
+const transformNode: NodeTransform = ({ tag }) => (tag === "h1" ? { tag: "h2" } : undefined);
+
 export default function App() {
-  return (
-    <Markdown
-      value="# Hello World"
-      transformNode={({ tag }) => (tag === "h1" ? { tag: "h2" } : undefined)}
-    />
-  );
+  return <Markdown value="# Hello World" transformNode={transformNode} />;
 }
 ```
 

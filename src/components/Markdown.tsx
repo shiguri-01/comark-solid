@@ -1,7 +1,7 @@
 import { createSerializedMarkdownParser } from "comark";
 import type { MarkdownDocument as MarkdownDocumentType, ParserOptions } from "comark";
 import { isMarkdownDocument } from "comark/utils";
-import { createMemo, merge, omit, type Component, type ValidComponent } from "solid-js";
+import { createMemo, merge, omit, type Component } from "solid-js";
 
 import { MarkdownDocument, type MarkdownDocumentProps } from "./MarkdownDocument";
 
@@ -19,32 +19,6 @@ export interface MarkdownProps extends Omit<MarkdownDocumentProps, "value"> {
    * @default undefined
    */
   options?: ParserOptions;
-
-  /**
-   * Maps element tags to Solid components.
-   *
-   * When an element matches a key in this object, the corresponding
-   * component is rendered instead of the native element.
-   *
-   * @default `{}`
-   */
-  components?: Record<string, ValidComponent>;
-
-  /**
-   * Runtime values referenced from markdown via `:prop="data.path"`.
-   *
-   * @default `{}`
-   */
-  data?: Record<string, unknown>;
-
-  /**
-   * Additional class for the wrapper div.
-   *
-   *  The `comark-content` class is always included.
-   *
-   * @default undefined
-   */
-  class?: string;
 
   /**
    * Enable streaming mode.

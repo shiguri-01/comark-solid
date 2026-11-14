@@ -1,6 +1,6 @@
 import { render, screen } from "@solidjs/testing-library";
 import type { JSX } from "@solidjs/web";
-import { parseMarkdown } from "comark";
+import { parseMarkdown, type NodeTransform } from "comark";
 import { createSignal, flush, lazy, Loading, type Component } from "solid-js";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -9,12 +9,10 @@ import { Markdown } from "../src/components/Markdown";
 describe("Markdown component", () => {
   describe("String input and parsing", () => {
     it("forwards node transforms when parsing markdown", async () => {
+      const transformNode: NodeTransform = ({ tag }) => (tag === "h1" ? { tag: "h2" } : undefined);
       render(() => (
         <Loading fallback={null}>
-          <Markdown
-            value="# Title"
-            transformNode={({ tag }) => (tag === "h1" ? { tag: "h2" } : undefined)}
-          />
+          <Markdown value="# Title" transformNode={transformNode} />
         </Loading>
       ));
       expect(await screen.findByRole("heading", { level: 2 })).toHaveTextContent("Title");

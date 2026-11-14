@@ -1,4 +1,4 @@
-import { dynamic, type JSX } from "@solidjs/web";
+import { dynamic, type ComponentProps, type JSX } from "@solidjs/web";
 import type {
   ElementNode as ComarkElementNode,
   MarkdownDocument as MarkdownDocumentType,
@@ -13,11 +13,11 @@ import {
   resolveAttributes,
   toNativeAttributes,
 } from "comark/utils";
-import { createMemo, merge, Loading, type Component, type ValidComponent } from "solid-js";
+import { createMemo, merge, Loading, type Component, type ValidComponent, omit } from "solid-js";
 
 import { getAttributes, getChildren, getTag } from "../utils/ast";
 
-export interface MarkdownDocumentProps {
+export interface MarkdownDocumentProps extends Omit<ComponentProps<"div">, "children"> {
   /**
    * The parsed Comark document to render.
    */
@@ -50,7 +50,7 @@ export interface MarkdownDocumentProps {
    *
    * @default undefined
    */
-  class?: string;
+  class?: JSX.ClassValue;
 }
 
 type LocalContext = {
@@ -278,6 +278,7 @@ function createNodeRenderer(
  */
 export const MarkdownDocument: Component<MarkdownDocumentProps> = (_props) => {
   const props = merge({ components: {}, data: {}, class: undefined }, _props);
+  const rest = omit(props, "value", "components", "data", "transformNode", "class");
 
   const renderedNodes = createMemo(() => {
     const renderNode = createNodeRenderer(props.components, props.transformNode);
@@ -296,12 +297,9 @@ export const MarkdownDocument: Component<MarkdownDocumentProps> = (_props) => {
       .filter(Boolean);
   });
 
-  const wrapperClass = createMemo(() =>
-    ["comark-content", props.class]
-      .map((cls) => cls?.trim())
-      .filter(Boolean)
-      .join(" "),
+  return (
+    <div class={["comark-content", props.class]} {...rest}>
+      {renderedNodes()}
+    </div>
   );
-
-  return <div class={wrapperClass()}>{renderedNodes()}</div>;
 };
