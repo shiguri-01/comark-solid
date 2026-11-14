@@ -1,7 +1,7 @@
-import { parseMarkdown } from "comark";
+import { createSerializedMarkdownParser } from "comark";
 import type { MarkdownDocument as MarkdownDocumentType, ParserOptions } from "comark";
 import { isMarkdownDocument } from "comark/utils";
-import { createMemo, merge, type Component, type ValidComponent } from "solid-js";
+import { createMemo, merge, omit, type Component, type ValidComponent } from "solid-js";
 
 import { MarkdownDocument, type MarkdownDocumentProps } from "./MarkdownDocument";
 
@@ -45,6 +45,13 @@ export interface MarkdownProps extends Omit<MarkdownDocumentProps, "value"> {
    * @default undefined
    */
   class?: string;
+
+  /**
+   * Enable streaming mode.
+   *
+   * @default false
+   */
+  streaming?: boolean;
 }
 
 /**
@@ -78,20 +85,14 @@ export interface MarkdownProps extends Omit<MarkdownDocumentProps, "value"> {
  * ```
  */
 export const Markdown: Component<MarkdownProps> = (_props) => {
-  const props = merge({ components: {}, data: {} }, _props);
+  const props = merge({ components: {}, data: {}, streaming: false }, _props);
+  const rest = omit(props, "value", "options", "streaming");
 
+  const parse = createMemo(() => createSerializedMarkdownParser(props.options));
   const document = createMemo(() => {
     const value = props.value;
-    return isMarkdownDocument(value) ? value : parseMarkdown(value as string, props.options);
+    return isMarkdownDocument(value) ? value : parse()(value, { streaming: props.streaming });
   });
 
-  return (
-    <MarkdownDocument
-      value={document()}
-      components={props.components}
-      data={props.data}
-      transformNode={props.transformNode}
-      class={props.class}
-    />
-  );
+  return <MarkdownDocument value={document()} {...rest} />;
 };

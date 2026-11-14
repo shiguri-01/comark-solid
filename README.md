@@ -32,7 +32,8 @@ export default function App() {
 | Prop            | Type                                        | Default      | Description                                                                        |
 | :-------------- | :------------------------------------------ | :----------- | :--------------------------------------------------------------------------------- |
 | `value`         | `string \| MarkdownDocument`                | _(Required)_ | Markdown string or pre-parsed document.                                            |
-| `options`       | `ParserOptions`                             | `undefined`  | Options passed to `parseMarkdown` (ignored if `value` is a `MarkdownDocument`).    |
+| `options`       | `ParserOptions`                             | `undefined`  | Options for parsing Markdown strings.                                              |
+| `streaming`     | `boolean`                                   | `false`      | Enable streaming mode.                                                             |
 | `transformNode` | `NodeTransform \| readonly NodeTransform[]` | `undefined`  | Transform resolved element tags and props before rendering.                        |
 | `components`    | `Record<string, ValidComponent>`            | `{}`         | Map of AST node names to Solid components.                                         |
 | `data`          | `Record<string, unknown>`                   | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                   |
