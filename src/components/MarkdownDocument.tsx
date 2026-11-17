@@ -13,7 +13,16 @@ import {
   resolveAttributes,
   toNativeAttributes,
 } from "comark/utils";
-import { createMemo, merge, Loading, type Component, type ValidComponent, omit } from "solid-js";
+import {
+  createMemo,
+  merge,
+  Loading,
+  type Component,
+  type ValidComponent,
+  omit,
+  For,
+  untrack,
+} from "solid-js";
 
 import { getAttributes, getChildren, getTag } from "../utils/ast";
 
@@ -73,6 +82,14 @@ type ElementNode = {
 type ComponentNode = ElementNode & {
   readonly component: ValidComponent;
 };
+
+function hasDynamicAttributes(node: Node): boolean {
+  if (typeof node === "string") return false;
+  return (
+    Object.keys(getAttributes(node)).some((key) => key.startsWith(":")) ||
+    getChildren(node).some(hasDynamicAttributes)
+  );
+}
 
 function resolveProps(node: Node, renderData: NodeRenderData) {
   return resolveAttributes(getAttributes(node), renderData, { parseJson: true });
@@ -280,26 +297,38 @@ export const MarkdownDocument: Component<MarkdownDocumentProps> = (_props) => {
   const props = merge({ components: {}, data: {}, class: undefined }, _props);
   const rest = omit(props, "value", "components", "data", "transformNode", "class");
 
-  const renderedNodes = createMemo(() => {
-    const renderNode = createNodeRenderer(props.components, props.transformNode);
+  const renderNode = createMemo(() => createNodeRenderer(props.components, props.transformNode));
 
-    const document = props.value;
-
-    const renderData: NodeRenderData = {
-      frontmatter: document.frontmatter,
-      meta: document.meta,
+  const renderData = createMemo<NodeRenderData>(
+    () => ({
+      frontmatter: props.value.frontmatter,
+      meta: props.value.meta,
       data: props.data,
       props: {},
-    };
+    }),
+    {
+      equals: (prev, next) =>
+        prev.frontmatter === next.frontmatter && prev.meta === next.meta && prev.data === next.data,
+    },
+  );
 
-    return document.nodes
-      .map((node) => renderNode(node, { parent: undefined, renderData }))
-      .filter(Boolean);
-  });
+  const getRenderData = (node: Node) =>
+    props.transformNode || hasDynamicAttributes(node) ? renderData() : untrack(renderData);
 
   return (
     <div class={["comark-content", props.class]} {...rest}>
-      {renderedNodes()}
+      <For each={props.value.nodes}>
+        {(node) => {
+          return (
+            <>
+              {renderNode()(node, {
+                parent: undefined,
+                renderData: getRenderData(node),
+              })}
+            </>
+          );
+        }}
+      </For>
     </div>
   );
 };
