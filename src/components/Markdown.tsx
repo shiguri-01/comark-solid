@@ -19,13 +19,6 @@ export interface MarkdownProps extends Omit<MarkdownDocumentProps, "value"> {
    * @default undefined
    */
   options?: ParserOptions;
-
-  /**
-   * Enable streaming mode.
-   *
-   * @default false
-   */
-  streaming?: boolean;
 }
 
 /**
@@ -60,7 +53,7 @@ export interface MarkdownProps extends Omit<MarkdownDocumentProps, "value"> {
  */
 export const Markdown: Component<MarkdownProps> = (_props) => {
   const props = merge({ components: {}, data: {}, streaming: false }, _props);
-  const rest = omit(props, "value", "options", "streaming");
+  const rest = omit(props, "value", "options");
 
   const parse = createMemo(() => createSerializedMarkdownParser(props.options));
   const document = createMemo(() => {

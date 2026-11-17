@@ -95,6 +95,20 @@ const x = 1;
   });
 
   describe("Props forwarding to MarkdownDocument", () => {
+    it("forwards streaming mode when rendering a parsed document", async () => {
+      const initial = await parseMarkdown("Stable paragraph");
+      const appended = await parseMarkdown("Appended paragraph");
+      const [document, setDocument] = createSignal(initial);
+
+      render(() => <Markdown value={document()} streaming />);
+      const stableParagraph = screen.getByText("Stable paragraph");
+      setDocument({ ...initial, nodes: [...initial.nodes, ...appended.nodes] });
+      flush();
+
+      expect(screen.getByText("Stable paragraph")).toBe(stableParagraph);
+      expect(screen.getByText("Appended paragraph")).toBeInTheDocument();
+    });
+
     it("forwards components prop to MarkdownDocument", async () => {
       const CustomHeading: Component<{ children?: JSX.Element }> = (props) => (
         <h1 class="custom-title">{props.children}</h1>
