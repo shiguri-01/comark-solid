@@ -35,15 +35,21 @@ export default defineConfig({
   },
   fmt: { sortImports: true },
   test: {
-    // Vitest v4 compatibility: preserve mock call history.
-    // Remove after tests no longer rely on calls from setup or earlier tests.
-    // https://viteplus.dev/guide/vitest-v5#remove-unneeded-compatibility-settings
-    // https://vitest.dev/guide/migration/#clearmocks-is-enabled-by-default
-    clearMocks: false,
-    environment: "jsdom",
-    globals: false,
-    setupFiles: ["./vitest-setup.ts"],
-    // Remove this option when tests need module isolation.
     isolate: false,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "client",
+          environment: "jsdom",
+          include: ["tests/*.test.{ts,tsx}"],
+          setupFiles: ["./vitest-setup.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: { name: "ssr", environment: "node", include: ["tests/ssr/**/*.test.tsx"] },
+      },
+    ],
   },
 });
