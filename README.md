@@ -145,7 +145,7 @@ export default function Card(props: CardProps) {
 
 ## Acknowledgements
 
-This project is heavily based on the official [Comark React renderer](https://github.com/ComarkDev/comark/tree/main/packages/react),
+This project is heavily based on the official [Comark React renderer](https://github.com/comarkdown/comark/tree/main/packages/comark-react),
 adapted for Solid's component model and APIs.
 
 The original implementation is licensed under the MIT License.
