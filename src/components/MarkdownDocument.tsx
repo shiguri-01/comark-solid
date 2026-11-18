@@ -304,42 +304,31 @@ export const MarkdownDocument: Component<MarkdownDocumentProps> = (_props) => {
   const props = merge({ components: {}, data: {}, class: undefined, streaming: false }, _props);
   const rest = omit(props, "value", "components", "data", "transformNode", "class", "streaming");
 
-  const renderedNodes = createMemo(() => {
-    if (props.streaming) return renderStreamingNodes();
+  const renderNode = createMemo(() => createNodeRenderer(props.components, props.transformNode));
 
-    const renderNode = createNodeRenderer(props.components, props.transformNode);
-    const document = props.value;
-    const renderData: NodeRenderData = {
-      frontmatter: document.frontmatter,
-      meta: document.meta,
+  const renderData = createMemo<NodeRenderData>(
+    () => ({
+      frontmatter: props.value.frontmatter,
+      meta: props.value.meta,
       data: props.data,
       props: {},
-    };
+    }),
+    {
+      equals: (prev, next) =>
+        prev.frontmatter === next.frontmatter && prev.meta === next.meta && prev.data === next.data,
+    },
+  );
 
-    return document.nodes
-      .map((node) => renderNode(node, { parent: undefined, renderData }))
-      .filter(Boolean);
-  });
+  const renderedNodes = createMemo(() => {
+    if (!props.streaming) {
+      const render = renderNode();
+      const context = {
+        parent: undefined,
+        renderData: renderData(),
+      };
 
-  function renderStreamingNodes() {
-    const renderNode = createMemo(() => createNodeRenderer(props.components, props.transformNode));
-    const renderData = createMemo<NodeRenderData>(
-      () => ({
-        frontmatter: props.value.frontmatter,
-        meta: props.value.meta,
-        data: props.data,
-        props: {},
-      }),
-      {
-        equals: (prev, next) =>
-          prev.frontmatter === next.frontmatter &&
-          prev.meta === next.meta &&
-          prev.data === next.data,
-      },
-    );
-
-    const getRenderData = (node: Node) =>
-      props.transformNode || hasDynamicAttributes(node) ? renderData() : untrack(renderData);
+      return props.value.nodes.map((node) => render(node, context)).filter(Boolean);
+    }
 
     return (
       <For each={props.value.nodes}>
@@ -347,13 +336,16 @@ export const MarkdownDocument: Component<MarkdownDocumentProps> = (_props) => {
           <>
             {renderNode()(node, {
               parent: undefined,
-              renderData: getRenderData(node),
+              renderData:
+                !!props.transformNode || hasDynamicAttributes(node)
+                  ? renderData()
+                  : untrack(renderData),
             })}
           </>
         )}
       </For>
     );
-  }
+  });
 
   return (
     <div class={["comark-content", props.class]} {...rest}>
