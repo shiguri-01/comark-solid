@@ -13,7 +13,16 @@ import {
   resolveAttributes,
   toNativeAttributes,
 } from "comark/utils";
-import { createMemo, merge, Loading, type Component, type ValidComponent, omit } from "solid-js";
+import {
+  createMemo,
+  merge,
+  Loading,
+  type Component,
+  type ValidComponent,
+  omit,
+  For,
+  untrack,
+} from "solid-js";
 
 import { getAttributes, getChildren, getTag } from "../utils/ast";
 
@@ -22,6 +31,13 @@ export interface MarkdownDocumentProps extends Omit<ComponentProps<"div">, "chil
    * The parsed Comark document to render.
    */
   value: MarkdownDocumentType;
+
+  /**
+   * Reuse rendered blocks when successive documents retain their AST nodes.
+   *
+   * @default false
+   */
+  streaming?: boolean;
 
   /**
    * Maps element tags to Solid components.
@@ -73,6 +89,14 @@ type ElementNode = {
 type ComponentNode = ElementNode & {
   readonly component: ValidComponent;
 };
+
+function hasDynamicAttributes(node: Node): boolean {
+  if (typeof node === "string") return false;
+  return (
+    Object.keys(getAttributes(node)).some((key) => key.startsWith(":")) ||
+    getChildren(node).some(hasDynamicAttributes)
+  );
+}
 
 function resolveProps(node: Node, renderData: NodeRenderData) {
   return resolveAttributes(getAttributes(node), renderData, { parseJson: true });
@@ -277,24 +301,50 @@ function createNodeRenderer(
  *  ```
  */
 export const MarkdownDocument: Component<MarkdownDocumentProps> = (_props) => {
-  const props = merge({ components: {}, data: {}, class: undefined }, _props);
-  const rest = omit(props, "value", "components", "data", "transformNode", "class");
+  const props = merge({ components: {}, data: {}, class: undefined, streaming: false }, _props);
+  const rest = omit(props, "value", "components", "data", "transformNode", "class", "streaming");
 
-  const renderedNodes = createMemo(() => {
-    const renderNode = createNodeRenderer(props.components, props.transformNode);
+  const renderNode = createMemo(() => createNodeRenderer(props.components, props.transformNode));
 
-    const document = props.value;
-
-    const renderData: NodeRenderData = {
-      frontmatter: document.frontmatter,
-      meta: document.meta,
+  const renderData = createMemo<NodeRenderData>(
+    () => ({
+      frontmatter: props.value.frontmatter,
+      meta: props.value.meta,
       data: props.data,
       props: {},
-    };
+    }),
+    {
+      equals: (prev, next) =>
+        prev.frontmatter === next.frontmatter && prev.meta === next.meta && prev.data === next.data,
+    },
+  );
 
-    return document.nodes
-      .map((node) => renderNode(node, { parent: undefined, renderData }))
-      .filter(Boolean);
+  const renderedNodes = createMemo(() => {
+    if (!props.streaming) {
+      const render = renderNode();
+      const context = {
+        parent: undefined,
+        renderData: renderData(),
+      };
+
+      return props.value.nodes.map((node) => render(node, context)).filter(Boolean);
+    }
+
+    return (
+      <For each={props.value.nodes}>
+        {(node) => (
+          <>
+            {renderNode()(node, {
+              parent: undefined,
+              renderData:
+                !!props.transformNode || hasDynamicAttributes(node)
+                  ? renderData()
+                  : untrack(renderData),
+            })}
+          </>
+        )}
+      </For>
+    );
   });
 
   return (

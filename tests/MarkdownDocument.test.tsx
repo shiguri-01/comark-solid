@@ -2,7 +2,7 @@ import { render, screen } from "@solidjs/testing-library";
 import type { JSX } from "@solidjs/web";
 import type { MarkdownDocument as MarkdownDocumentType } from "comark";
 import { parseMarkdown } from "comark";
-import { lazy, type Component } from "solid-js";
+import { createSignal, flush, lazy, type Component } from "solid-js";
 import { describe, expect, it } from "vite-plus/test";
 
 import { MarkdownDocument } from "../src/components/MarkdownDocument";
@@ -16,6 +16,51 @@ function createDoc(nodes: MarkdownDocumentType["nodes"]): MarkdownDocumentType {
 }
 
 describe("MarkdownDocument component", () => {
+  it("reuses stable nodes only in streaming mode and responds to mode changes", () => {
+    const initial = createDoc([["p", {}, "Stable paragraph"]]);
+    const [document, setDocument] = createSignal(initial);
+    const [streaming, setStreaming] = createSignal<boolean | undefined>(undefined);
+    const { container } = render(() => (
+      <MarkdownDocument value={document()} streaming={streaming()} />
+    ));
+    const wrapper = container.firstElementChild;
+    const firstParagraph = screen.getByText("Stable paragraph");
+
+    setDocument(createDoc([...initial.nodes, ["p", {}, "Second paragraph"]]));
+    flush();
+    expect(screen.getByText("Stable paragraph")).not.toBe(firstParagraph);
+
+    setStreaming(true);
+    flush();
+    const streamingParagraph = screen.getByText("Stable paragraph");
+    setDocument(createDoc([...initial.nodes, ["p", {}, "Updated paragraph"]]));
+    flush();
+    expect(screen.getByText("Stable paragraph")).toBe(streamingParagraph);
+    expect(screen.getByText("Updated paragraph")).toBeInTheDocument();
+    expect(wrapper).not.toHaveAttribute("streaming");
+
+    setStreaming(false);
+    flush();
+    const finalParagraph = screen.getByText("Stable paragraph");
+    setDocument(createDoc([...initial.nodes, ["p", {}, "Final paragraph"]]));
+    flush();
+    expect(screen.getByText("Stable paragraph")).not.toBe(finalParagraph);
+    expect(screen.getByText("Final paragraph")).toBeInTheDocument();
+    expect(container.firstElementChild).toBe(wrapper);
+  });
+
+  it.each([false, true])("updates runtime attributes with streaming=%s", (streaming) => {
+    const document = createDoc([["p", { ":title": "data.title" }, "Paragraph"]]);
+    const [data, setData] = createSignal({ title: "Initial title" });
+
+    render(() => <MarkdownDocument value={document} data={data()} streaming={streaming} />);
+    expect(screen.getByText("Paragraph")).toHaveAttribute("title", "Initial title");
+
+    setData({ title: "Updated title" });
+    flush();
+    expect(screen.getByText("Paragraph")).toHaveAttribute("title", "Updated title");
+  });
+
   it("applies ordered transforms before component lookup and scopes transformed props to children", () => {
     const doc = createDoc([["badge", {}, ["span", { ":title": "props.tone" }]]]);
     const Pill: Component<{ tone?: string; children?: JSX.Element }> = (props) => (

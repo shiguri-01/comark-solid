@@ -19,13 +19,6 @@ export interface MarkdownProps extends Omit<MarkdownDocumentProps, "value"> {
    * @default undefined
    */
   options?: ParserOptions;
-
-  /**
-   * Enable streaming mode.
-   *
-   * @default false
-   */
-  streaming?: boolean;
 }
 
 /**
@@ -68,5 +61,5 @@ export const Markdown: Component<MarkdownProps> = (_props) => {
     return isMarkdownDocument(value) ? value : parse()(value, { streaming: props.streaming });
   });
 
-  return <MarkdownDocument value={document()} {...rest} />;
+  return <MarkdownDocument value={document()} streaming={props.streaming} {...rest} />;
 };

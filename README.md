@@ -33,7 +33,7 @@ export default function App() {
 | :-------------- | :------------------------------------------ | :----------- | :------------------------------------------------------------------------------ |
 | `value`         | `string \| MarkdownDocument`                | _(Required)_ | Markdown string or pre-parsed document.                                         |
 | `options`       | `ParserOptions`                             | `undefined`  | Options for parsing Markdown strings.                                           |
-| `streaming`     | `boolean`                                   | `false`      | Enable streaming mode.                                                          |
+| `streaming`     | `boolean`                                   | `false`      | Enable incremental parsing and reuse rendered blocks during streaming.          |
 | `transformNode` | `NodeTransform \| readonly NodeTransform[]` | `undefined`  | Transform resolved element tags and props before rendering.                     |
 | `components`    | `Record<string, ValidComponent>`            | `{}`         | Map of AST node names to Solid components.                                      |
 | `data`          | `Record<string, unknown>`                   | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                |
@@ -61,6 +61,7 @@ export default function App() {
 | Prop            | Type                                        | Default      | Description                                                                     |
 | :-------------- | :------------------------------------------ | :----------- | :------------------------------------------------------------------------------ |
 | `value`         | `MarkdownDocument`                          | _(Required)_ | Pre-parsed Comark document AST.                                                 |
+| `streaming`     | `boolean`                                   | `false`      | Reuse rendered blocks whose AST node references are retained between updates.   |
 | `transformNode` | `NodeTransform \| readonly NodeTransform[]` | `undefined`  | Transform resolved element tags and props before rendering.                     |
 | `components`    | `Record<string, ValidComponent>`            | `{}`         | Map of AST node names to Solid components.                                      |
 | `data`          | `Record<string, unknown>`                   | `{}`         | Runtime values referenced from markdown via `:prop="data.path"`.                |

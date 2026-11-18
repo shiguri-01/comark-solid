@@ -2,7 +2,7 @@ import { render, screen } from "@solidjs/testing-library";
 import type { JSX } from "@solidjs/web";
 import { parseMarkdown, type NodeTransform } from "comark";
 import { createSignal, flush, lazy, Loading, type Component } from "solid-js";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { Markdown } from "../src/components/Markdown";
 
@@ -95,6 +95,20 @@ const x = 1;
   });
 
   describe("Props forwarding to MarkdownDocument", () => {
+    it("forwards streaming mode when rendering a parsed document", async () => {
+      const initial = await parseMarkdown("Stable paragraph");
+      const appended = await parseMarkdown("Appended paragraph");
+      const [document, setDocument] = createSignal(initial);
+
+      render(() => <Markdown value={document()} streaming />);
+      const stableParagraph = screen.getByText("Stable paragraph");
+      setDocument({ ...initial, nodes: [...initial.nodes, ...appended.nodes] });
+      flush();
+
+      expect(screen.getByText("Stable paragraph")).toBe(stableParagraph);
+      expect(screen.getByText("Appended paragraph")).toBeInTheDocument();
+    });
+
     it("forwards components prop to MarkdownDocument", async () => {
       const CustomHeading: Component<{ children?: JSX.Element }> = (props) => (
         <h1 class="custom-title">{props.children}</h1>
@@ -171,6 +185,90 @@ const x = 1;
   });
 
   describe("Reactivity", () => {
+    it("reuses completed blocks while streaming and updates the unfinished block", async () => {
+      const [source, setSource] = createSignal("First paragraph\n\nSecond");
+
+      render(() => (
+        <Loading fallback={null}>
+          <Markdown value={source()} streaming />
+        </Loading>
+      ));
+
+      const first = await screen.findByText("First paragraph");
+      setSource("First paragraph\n\nSecond paragraph");
+      expect(await screen.findByText("Second paragraph")).toBeInTheDocument();
+      expect(screen.getByText("First paragraph")).toBe(first);
+
+      setSource("First paragraph\n\nSecond paragraph\n\nThird paragraph");
+      expect(await screen.findByText("Third paragraph")).toBeInTheDocument();
+      expect(screen.getByText("First paragraph")).toBe(first);
+    });
+
+    it("renders the final full parse when streaming ends", async () => {
+      const markdown = "# Example\n\n```js\nconst value = 1;\n```\n\n";
+      const [streaming, setStreaming] = createSignal(true);
+      const { container } = render(() => (
+        <Loading fallback={null}>
+          <Markdown value={markdown} streaming={streaming()} />
+        </Loading>
+      ));
+      await screen.findByRole("heading", { name: "Example" });
+
+      setStreaming(false);
+      const expected = await parseMarkdown(markdown);
+      const { container: reference } = render(() => <Markdown value={expected} />);
+      await vi.waitFor(() => expect(container.innerHTML).toBe(reference.innerHTML));
+    });
+
+    it("uses updated parser options", async () => {
+      const [headingIds, setHeadingIds] = createSignal(true);
+      render(() => (
+        <Loading fallback={null}>
+          <Markdown value="# Example" options={{ headingIds: headingIds() }} streaming />
+        </Loading>
+      ));
+      const heading = await screen.findByRole("heading", { name: "Example" });
+      expect(heading).toHaveAttribute("id", "example");
+
+      setHeadingIds(false);
+      await vi.waitFor(() =>
+        expect(screen.getByRole("heading", { name: "Example" })).not.toHaveAttribute("id"),
+      );
+    });
+
+    it("displays the latest input after a pending asynchronous parse", async () => {
+      let release!: () => void;
+      let started!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const parsing = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const plugin = {
+        name: "delayed-parse",
+        pre: async () => {
+          started();
+          await pending;
+        },
+      };
+      const [source, setSource] = createSignal("Initial");
+      render(() => (
+        <Loading fallback={null}>
+          <Markdown value={source()} options={{ plugins: [plugin] }} streaming />
+        </Loading>
+      ));
+      await parsing;
+      setSource("Initial and updated");
+      flush();
+      setSource("Initial and updated again");
+      flush();
+      release();
+
+      expect(await screen.findByText("Initial and updated again")).toBeInTheDocument();
+      expect(screen.queryByText("Initial")).not.toBeInTheDocument();
+    });
+
     it("updates rendered content when value signal changes", async () => {
       const [source, setSource] = createSignal("# Initial");
 
