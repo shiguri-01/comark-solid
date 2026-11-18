@@ -49,6 +49,18 @@ describe("MarkdownDocument component", () => {
     expect(container.firstElementChild).toBe(wrapper);
   });
 
+  it.each([false, true])("updates runtime attributes with streaming=%s", (streaming) => {
+    const document = createDoc([["p", { ":title": "data.title" }, "Paragraph"]]);
+    const [data, setData] = createSignal({ title: "Initial title" });
+
+    render(() => <MarkdownDocument value={document} data={data()} streaming={streaming} />);
+    expect(screen.getByText("Paragraph")).toHaveAttribute("title", "Initial title");
+
+    setData({ title: "Updated title" });
+    flush();
+    expect(screen.getByText("Paragraph")).toHaveAttribute("title", "Updated title");
+  });
+
   it("applies ordered transforms before component lookup and scopes transformed props to children", () => {
     const doc = createDoc([["badge", {}, ["span", { ":title": "props.tone" }]]]);
     const Pill: Component<{ tone?: string; children?: JSX.Element }> = (props) => (

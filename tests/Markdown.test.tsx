@@ -185,6 +185,25 @@ const x = 1;
   });
 
   describe("Reactivity", () => {
+    it("reuses completed blocks while streaming and updates the unfinished block", async () => {
+      const [source, setSource] = createSignal("First paragraph\n\nSecond");
+
+      render(() => (
+        <Loading fallback={null}>
+          <Markdown value={source()} streaming />
+        </Loading>
+      ));
+
+      const first = await screen.findByText("First paragraph");
+      setSource("First paragraph\n\nSecond paragraph");
+      expect(await screen.findByText("Second paragraph")).toBeInTheDocument();
+      expect(screen.getByText("First paragraph")).toBe(first);
+
+      setSource("First paragraph\n\nSecond paragraph\n\nThird paragraph");
+      expect(await screen.findByText("Third paragraph")).toBeInTheDocument();
+      expect(screen.getByText("First paragraph")).toBe(first);
+    });
+
     it("updates rendered content when value signal changes", async () => {
       const [source, setSource] = createSignal("# Initial");
 
