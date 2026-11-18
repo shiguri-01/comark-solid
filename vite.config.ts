@@ -23,7 +23,6 @@ export default defineConfig({
     dts: {
       generator: "tsgo",
     },
-    exports: true,
   },
   lint: {
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }, "eslint-plugin-solid"],
