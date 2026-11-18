@@ -53,7 +53,7 @@ export interface MarkdownProps extends Omit<MarkdownDocumentProps, "value"> {
  */
 export const Markdown: Component<MarkdownProps> = (_props) => {
   const props = merge({ components: {}, data: {}, streaming: false }, _props);
-  const rest = omit(props, "value", "options");
+  const rest = omit(props, "value", "options", "streaming");
 
   const parse = createMemo(() => createSerializedMarkdownParser(props.options));
   const document = createMemo(() => {
@@ -61,5 +61,5 @@ export const Markdown: Component<MarkdownProps> = (_props) => {
     return isMarkdownDocument(value) ? value : parse()(value, { streaming: props.streaming });
   });
 
-  return <MarkdownDocument value={document()} {...rest} />;
+  return <MarkdownDocument value={document()} streaming={props.streaming} {...rest} />;
 };
