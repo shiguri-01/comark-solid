@@ -25,7 +25,7 @@ export interface MarkdownProps extends Omit<MarkdownDocumentProps, "value"> {
  * Markdown component
  *
  * Renders a Markdown string or an already-parsed Comark document using Solid components.
- * Markdown strings are parsed on the client before rendering.
+ * Markdown strings are parsed asynchronously before rendering.
  *
  * Supports custom component mapping for element tags.
  *
