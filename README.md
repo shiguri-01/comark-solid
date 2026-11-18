@@ -15,15 +15,21 @@ npm install comark-solid comark
 
 ## `<Markdown>`
 
-Parses Markdown strings and renders them directly.
+`<Markdown>` parses Markdown strings and renders them directly.
+Parsing is asynchronous, so it suspends to the nearest `<Loading>` boundary.
 
 ```tsx
 import { Markdown } from "comark-solid";
+import { Loading } from "solid-js";
 
 const markdown = "# Hello World";
 
 export default function App() {
-  return <Markdown value={markdown} />;
+  return (
+    <Loading fallback={<p>Loading Markdown…</p>}>
+      <Markdown value={markdown} />
+    </Loading>
+  );
 }
 ```
 
@@ -43,7 +49,8 @@ Other `div` props, except `children`, are passed to the wrapper element.
 
 ## `<MarkdownDocument>`
 
-Renders a pre-parsed `MarkdownDocument` AST without invoking the parser. Ideal for server-side rendering (SSR), static site generation, or pre-compiled content.
+`<MarkdownDocument>` renders a `MarkdownDocument` AST produced by `parseMarkdown()`.
+It separates rendering from parsing, making it particularly useful for server-side parsing.
 
 ```tsx
 import { parseMarkdown } from "comark";
@@ -71,21 +78,27 @@ Other `div` props, except `children`, are passed to the wrapper element.
 
 ## Custom Components
 
-Map tag to Solid components via the `components` prop:
+Map tags to Solid components via the `components` prop:
 
 ```tsx
 import { Markdown } from "comark-solid";
+import { Loading } from "solid-js";
 
 import { Card } from "./Card";
 import { CustomHeading } from "./CustomHeading";
 
+const markdown = "# Hello World\n\n::card\nCard content\n::";
 const components = {
   h1: CustomHeading,
   card: Card,
 };
 
 export default function App() {
-  return <Markdown value={markdown} components={components} />;
+  return (
+    <Loading fallback={<p>Loading Markdown…</p>}>
+      <Markdown value={markdown} components={components} />
+    </Loading>
+  );
 }
 ```
 
