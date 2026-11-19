@@ -1,6 +1,7 @@
 import solidPlugin from "@solidjs/vite-plugin";
 import solidEslint from "eslint-plugin-solid/configs/v2";
 import { defineConfig, lazyPlugins } from "vite-plus";
+import { playwright } from "vite-plus/test/browser-playwright";
 
 export default defineConfig({
   staged: {
@@ -41,7 +42,12 @@ export default defineConfig({
         extends: true,
         test: {
           name: "client",
-          environment: "jsdom",
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright(),
+            instances: [{ browser: "chromium" }],
+          },
           include: ["tests/*.test.{ts,tsx}"],
           setupFiles: ["./vitest-setup.ts"],
         },

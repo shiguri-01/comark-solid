@@ -157,6 +157,18 @@ export default function Card(props: CardProps) {
 }
 ```
 
+## Development
+
+Install the dependencies and the Chromium headless shell before running tests:
+
+```sh
+vp install
+vp exec playwright install --only-shell chromium
+vp test
+```
+
+On Linux, add `--with-deps` to the Playwright install command if system libraries are missing.
+
 ## Acknowledgements
 
 This project is heavily based on the official [Comark React renderer](https://github.com/comarkdown/comark/tree/main/packages/comark-react),

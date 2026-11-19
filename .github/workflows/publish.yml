@@ -37,6 +37,10 @@ jobs:
       - name: Check
         run: vp run check
 
+      - name: Install Chromium for browser tests
+        if: hashFiles('node_modules/.bin/playwright') != ''
+        run: vp exec playwright install --with-deps --only-shell chromium
+
       - name: Test
         run: vp run test
 
