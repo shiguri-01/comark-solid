@@ -1,308 +1,188 @@
 import { render, screen } from "@solidjs/testing-library";
 import type { JSX } from "@solidjs/web";
 import { parseMarkdown, type NodeTransform } from "comark";
-import { createSignal, flush, lazy, Loading, type Component } from "solid-js";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { Markdown } from "comark-solid";
+import { createSignal, flush, Loading } from "solid-js";
+import { expect, it, vi } from "vite-plus/test";
 
-import { Markdown } from "../src/components/Markdown";
+it("renders Markdown and passes div props to its wrapper", async () => {
+  const source = [
+    "# Title",
+    "A **bold** [link](https://example.com).",
+    "- One\n- Two",
+    "> Quote",
+    "```js\nconst x = 1;\n```",
+  ].join("\n\n");
+  const { container } = render(() => (
+    <Loading fallback={<p>Parsing</p>}>
+      <Markdown value={source} id="article" class="prose" />
+    </Loading>
+  ));
 
-describe("Markdown component", () => {
-  describe("String input and parsing", () => {
-    it("forwards node transforms when parsing markdown", async () => {
-      const transformNode: NodeTransform = ({ tag }) => (tag === "h1" ? { tag: "h2" } : undefined);
-      render(() => (
-        <Loading fallback={null}>
-          <Markdown value="# Title" transformNode={transformNode} />
-        </Loading>
-      ));
-      expect(await screen.findByRole("heading", { level: 2 })).toHaveTextContent("Title");
-    });
+  await screen.findByRole("heading", { name: "Title" });
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content prose" id="article"><h1 id="title">Title</h1><p>A <strong>bold</strong> <a href="https://example.com">link</a>.</p><ul><li>One</li><li>Two</li></ul><blockquote>Quote</blockquote><pre data-language="js"><code class="language-js">const x = 1;</code></pre></div>"`,
+  );
+});
 
-    it("parses and renders markdown string with Loading boundary", async () => {
-      render(() => (
-        <Loading fallback={<div class="loading">Loading...</div>}>
-          <Markdown value={"# Title\n\nThis is a paragraph with **bold** text."} />
-        </Loading>
-      ));
+it("passes render transforms and components through the string entry point", async () => {
+  const transformNode: NodeTransform = ({ tag }) => (tag === "h1" ? { tag: "h2" } : undefined);
+  const { container } = render(() => (
+    <Loading fallback={null}>
+      <Markdown
+        value="# Title"
+        transformNode={transformNode}
+        components={{
+          h2: (props: { children?: JSX.Element }) => <h2 class="custom">{props.children}</h2>,
+        }}
+      />
+    </Loading>
+  ));
 
-      const heading = await screen.findByRole("heading", { level: 1 });
-      expect(heading).toHaveTextContent("Title");
+  await screen.findByRole("heading", { name: "Title", level: 2 });
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><h2 class="custom">Title</h2></div>"`,
+  );
+});
 
-      expect(screen.getByText("bold")).toBeInTheDocument();
-      expect(screen.getByText("bold").tagName.toLowerCase()).toBe("strong");
-    });
+it("updates the rendered Markdown as source and parser options change", async () => {
+  const [source, setSource] = createSignal("# Before");
+  const [headingIds, setHeadingIds] = createSignal(true);
+  const { container } = render(() => (
+    <Loading fallback={null}>
+      <Markdown value={source()} options={{ headingIds: headingIds() }} />
+    </Loading>
+  ));
 
-    it("renders lists, blockquotes, and code blocks", async () => {
-      const markdown = `
-- Item 1
-- Item 2
+  const heading = await screen.findByRole("heading", { name: "Before" });
+  expect(heading.id).toBe("before");
 
-> Quote block
+  setHeadingIds(false);
+  await vi.waitFor(() => expect(screen.getByRole("heading", { name: "Before" }).id).toBe(""));
 
-\`\`\`js
-const x = 1;
-\`\`\`
-`;
-      const { container } = render(() => (
-        <Loading fallback={<div>Loading...</div>}>
-          <Markdown value={markdown} />
-        </Loading>
-      ));
+  setSource("# After");
+  await screen.findByRole("heading", { name: "After" });
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><h1>After</h1></div>"`,
+  );
+});
 
-      const items = await screen.findAllByRole("listitem");
-      expect(items).toHaveLength(2);
-      expect(items[0]).toHaveTextContent("Item 1");
-      expect(items[1]).toHaveTextContent("Item 2");
+it("renders a parsed document synchronously, with runtime data and without calling the parser", async () => {
+  const document = await parseMarkdown(':badge{:name="data.name"}');
+  const pre = vi.fn();
+  const { container } = render(() => (
+    <Markdown
+      value={document}
+      options={{ plugins: [{ name: "observe-parse", pre }] }}
+      data={{ name: "Ada" }}
+      components={{ Badge: (props: { name: string }) => <strong>{props.name}</strong> }}
+    />
+  ));
 
-      expect(container.querySelector("blockquote")).toHaveTextContent("Quote block");
-      expect(container.querySelector("pre code")).toHaveTextContent("const x = 1;");
-    });
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><strong>Ada</strong></div>"`,
+  );
+  expect(pre).not.toHaveBeenCalled();
+});
+
+it("keeps a shared AST block mounted for a parsed-document append in streaming mode", async () => {
+  const initial = await parseMarkdown("Stable paragraph");
+  const appended = await parseMarkdown("Appended paragraph");
+  const [document, setDocument] = createSignal(initial);
+  const { container } = render(() => <Markdown value={document()} streaming />);
+
+  const stable = screen.getByText("Stable paragraph");
+  setDocument({ ...initial, nodes: [...initial.nodes, ...appended.nodes] });
+  flush();
+
+  expect(screen.getByText("Stable paragraph")).toBe(stable);
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><p>Stable paragraph</p><p>Appended paragraph</p></div>"`,
+  );
+});
+
+it("keeps a completed paragraph mounted while appending to this Markdown stream", async () => {
+  const [source, setSource] = createSignal("First paragraph\n\nSecond");
+  const { container } = render(() => (
+    <Loading fallback={null}>
+      <Markdown value={source()} streaming />
+    </Loading>
+  ));
+
+  const first = await screen.findByText("First paragraph");
+  setSource("First paragraph\n\nSecond paragraph");
+  await screen.findByText("Second paragraph");
+  expect(screen.getByText("First paragraph")).toBe(first);
+
+  setSource("First paragraph\n\nSecond paragraph\n\nThird paragraph");
+  await screen.findByText("Third paragraph");
+  expect(screen.getByText("First paragraph")).toBe(first);
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><p>First paragraph</p><p>Second paragraph</p><p>Third paragraph</p></div>"`,
+  );
+});
+
+it("renders the full-document result when streaming ends", async () => {
+  const source = "# Example\n\n```";
+  const [streaming, setStreaming] = createSignal(true);
+  const { container } = render(() => (
+    <Loading fallback={null}>
+      <Markdown value={source} streaming={streaming()} />
+    </Loading>
+  ));
+  await screen.findByRole("heading", { name: "Example" });
+  expect(container.querySelector("pre")).toBeNull();
+
+  const document = await parseMarkdown(source);
+  const { container: full } = render(() => <Markdown value={document} />);
+  expect(full.querySelector("pre code")).toBeInTheDocument();
+  setStreaming(false);
+  await vi.waitFor(() => expect(container.innerHTML).toBe(full.innerHTML));
+});
+
+it("renders only the latest input after an in-flight parse is released", async () => {
+  let release!: () => void;
+  let started!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
   });
-
-  describe("Pre-parsed MarkdownDocument input", () => {
-    it("renders pre-parsed MarkdownDocument synchronously without re-parsing", async () => {
-      const parsedDoc = await parseMarkdown("# Pre-parsed Heading\n\nParagraph text.");
-
-      render(() => <Markdown value={parsedDoc} />);
-
-      const h1 = screen.getByRole("heading", { level: 1 });
-      expect(h1).toHaveTextContent("Pre-parsed Heading");
-      expect(screen.getByText("Paragraph text.")).toBeInTheDocument();
-    });
+  const parsing = new Promise<void>((resolve) => {
+    started = resolve;
   });
+  const [source, setSource] = createSignal("Initial");
+  const { container } = render(() => (
+    <Loading fallback={<p>Parsing</p>}>
+      <Markdown
+        value={source()}
+        streaming
+        options={{
+          plugins: [
+            {
+              name: "delayed-parse",
+              pre: async () => {
+                started();
+                await pending;
+              },
+            },
+          ],
+        }}
+      />
+    </Loading>
+  ));
 
-  describe("ParserOptions passing", () => {
-    it("applies parser options when parsing string markdown", async () => {
-      let pluginCalled = false;
-      const testPlugin = () => ({
-        name: "test-plugin",
-        markdownItPlugins: [
-          () => {
-            pluginCalled = true;
-          },
-        ],
-      });
+  try {
+    await parsing;
+    expect(screen.getByText("Parsing")).toBeInTheDocument();
+    setSource("Initial and intermediate");
+    flush();
+    setSource("Initial and latest");
+    flush();
+  } finally {
+    release();
+  }
 
-      render(() => (
-        <Loading fallback={<div>Loading...</div>}>
-          <Markdown value="Hello" options={{ plugins: [testPlugin()] }} />
-        </Loading>
-      ));
-
-      await screen.findByText("Hello");
-      expect(pluginCalled).toBe(true);
-    });
-  });
-
-  describe("Props forwarding to MarkdownDocument", () => {
-    it("forwards streaming mode when rendering a parsed document", async () => {
-      const initial = await parseMarkdown("Stable paragraph");
-      const appended = await parseMarkdown("Appended paragraph");
-      const [document, setDocument] = createSignal(initial);
-
-      render(() => <Markdown value={document()} streaming />);
-      const stableParagraph = screen.getByText("Stable paragraph");
-      setDocument({ ...initial, nodes: [...initial.nodes, ...appended.nodes] });
-      flush();
-
-      expect(screen.getByText("Stable paragraph")).toBe(stableParagraph);
-      expect(screen.getByText("Appended paragraph")).toBeInTheDocument();
-    });
-
-    it("forwards components prop to MarkdownDocument", async () => {
-      const CustomHeading: Component<{ children?: JSX.Element }> = (props) => (
-        <h1 class="custom-title">{props.children}</h1>
-      );
-
-      render(() => (
-        <Loading fallback={<div>Loading...</div>}>
-          <Markdown value="# Custom H1" components={{ h1: CustomHeading }} />
-        </Loading>
-      ));
-
-      const heading = await screen.findByRole("heading", { level: 1 });
-      expect(heading).toHaveClass("custom-title");
-      expect(heading).toHaveTextContent("Custom H1");
-    });
-
-    it("forwards class prop to wrapper element", async () => {
-      const { container } = render(() => (
-        <Loading fallback={<div>Loading...</div>}>
-          <Markdown value="Simple text" class="theme-dark padded" />
-        </Loading>
-      ));
-
-      await screen.findByText("Simple text");
-      expect(container.firstElementChild).toHaveClass("comark-content", "theme-dark", "padded");
-    });
-
-    it("forwards data prop for attribute binding", async () => {
-      const doc = await parseMarkdown(":user-badge");
-      doc.nodes = [["user-badge", { ":name": "data.user.name" }]];
-
-      const UserBadge: Component<{ name?: string }> = (props) => (
-        <span class="user-badge" data-testid="badge">
-          {props.name}
-        </span>
-      );
-
-      render(() => (
-        <Markdown
-          value={doc}
-          data={{ user: { name: "Bob" } }}
-          components={{ "user-badge": UserBadge }}
-        />
-      ));
-
-      const badge = screen.getByTestId("badge");
-      expect(badge).toHaveTextContent("Bob");
-    });
-
-    it("forwards lazy() components prop and renders asynchronously", async () => {
-      const LazyAlert = lazy(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        const Component: Component<{ children?: JSX.Element }> = (props) => (
-          <div role="alert" class="lazy-alert">
-            {props.children}
-          </div>
-        );
-        return { default: Component };
-      });
-
-      const parsedDoc = await parseMarkdown("Alert text");
-      parsedDoc.nodes = [["lazy-alert", {}, "Dynamic lazy alert content"]];
-
-      render(() => (
-        <Loading fallback={<div>Loading alert...</div>}>
-          <Markdown value={parsedDoc} components={{ "lazy-alert": LazyAlert }} />
-        </Loading>
-      ));
-
-      const alert = await screen.findByRole("alert");
-      expect(alert).toHaveClass("lazy-alert");
-      expect(alert).toHaveTextContent("Dynamic lazy alert content");
-    });
-  });
-
-  describe("Reactivity", () => {
-    it("reuses completed blocks while streaming and updates the unfinished block", async () => {
-      const [source, setSource] = createSignal("First paragraph\n\nSecond");
-
-      render(() => (
-        <Loading fallback={null}>
-          <Markdown value={source()} streaming />
-        </Loading>
-      ));
-
-      const first = await screen.findByText("First paragraph");
-      setSource("First paragraph\n\nSecond paragraph");
-      expect(await screen.findByText("Second paragraph")).toBeInTheDocument();
-      expect(screen.getByText("First paragraph")).toBe(first);
-
-      setSource("First paragraph\n\nSecond paragraph\n\nThird paragraph");
-      expect(await screen.findByText("Third paragraph")).toBeInTheDocument();
-      expect(screen.getByText("First paragraph")).toBe(first);
-    });
-
-    it("renders the final full parse when streaming ends", async () => {
-      const markdown = "# Example\n\n```js\nconst value = 1;\n```\n\n";
-      const [streaming, setStreaming] = createSignal(true);
-      const { container } = render(() => (
-        <Loading fallback={null}>
-          <Markdown value={markdown} streaming={streaming()} />
-        </Loading>
-      ));
-      await screen.findByRole("heading", { name: "Example" });
-
-      setStreaming(false);
-      const expected = await parseMarkdown(markdown);
-      const { container: reference } = render(() => <Markdown value={expected} />);
-      await vi.waitFor(() => expect(container.innerHTML).toBe(reference.innerHTML));
-    });
-
-    it("uses updated parser options", async () => {
-      const [headingIds, setHeadingIds] = createSignal(true);
-      render(() => (
-        <Loading fallback={null}>
-          <Markdown value="# Example" options={{ headingIds: headingIds() }} streaming />
-        </Loading>
-      ));
-      const heading = await screen.findByRole("heading", { name: "Example" });
-      expect(heading).toHaveAttribute("id", "example");
-
-      setHeadingIds(false);
-      await vi.waitFor(() =>
-        expect(screen.getByRole("heading", { name: "Example" })).not.toHaveAttribute("id"),
-      );
-    });
-
-    it("displays the latest input after a pending asynchronous parse", async () => {
-      let release!: () => void;
-      let started!: () => void;
-      const pending = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      const parsing = new Promise<void>((resolve) => {
-        started = resolve;
-      });
-      const plugin = {
-        name: "delayed-parse",
-        pre: async () => {
-          started();
-          await pending;
-        },
-      };
-      const [source, setSource] = createSignal("Initial");
-      render(() => (
-        <Loading fallback={null}>
-          <Markdown value={source()} options={{ plugins: [plugin] }} streaming />
-        </Loading>
-      ));
-      await parsing;
-      setSource("Initial and updated");
-      flush();
-      setSource("Initial and updated again");
-      flush();
-      release();
-
-      expect(await screen.findByText("Initial and updated again")).toBeInTheDocument();
-      expect(screen.queryByText("Initial")).not.toBeInTheDocument();
-    });
-
-    it("updates rendered content when value signal changes", async () => {
-      const [source, setSource] = createSignal("# Initial");
-
-      render(() => (
-        <Loading fallback={<div>Loading...</div>}>
-          <Markdown value={source()} />
-        </Loading>
-      ));
-
-      const initialHeading = await screen.findByRole("heading", { name: "Initial" });
-      expect(initialHeading).toBeInTheDocument();
-
-      setSource("# Updated");
-
-      const updatedHeading = await screen.findByRole("heading", { name: "Updated" });
-      expect(updatedHeading).toBeInTheDocument();
-    });
-
-    it("updates wrapper class when class signal changes", async () => {
-      const [cls, setCls] = createSignal("theme-light");
-
-      const { container } = render(() => (
-        <Loading fallback={<div>Loading...</div>}>
-          <Markdown value="Text" class={cls()} />
-        </Loading>
-      ));
-
-      await screen.findByText("Text");
-      expect(container.firstElementChild).toHaveClass("comark-content", "theme-light");
-
-      setCls("theme-dark");
-      flush();
-
-      expect(container.firstElementChild).toHaveClass("comark-content", "theme-dark");
-    });
-  });
+  await screen.findByText("Initial and latest");
+  expect(container.innerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><p>Initial and latest</p></div>"`,
+  );
 });

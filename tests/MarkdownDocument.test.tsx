@@ -1,582 +1,314 @@
 import { render, screen } from "@solidjs/testing-library";
 import type { JSX } from "@solidjs/web";
-import type { MarkdownDocument as MarkdownDocumentType } from "comark";
-import { parseMarkdown } from "comark";
-import { createSignal, flush, lazy, type Component } from "solid-js";
-import { describe, expect, it } from "vite-plus/test";
+import { parseMarkdown, type MarkdownDocument as Document } from "comark";
+import { MarkdownDocument } from "comark-solid";
+import { createSignal, flush, lazy, Loading } from "solid-js";
+import { expect, it } from "vite-plus/test";
 
-import { MarkdownDocument } from "../src/components/MarkdownDocument";
-
-function createDoc(nodes: MarkdownDocumentType["nodes"]): MarkdownDocumentType {
-  return {
-    nodes,
-    frontmatter: {},
-    meta: {},
-  };
+function documentWith(...nodes: Document["nodes"]): Document {
+  return { nodes, frontmatter: {}, meta: {} };
 }
 
-describe("MarkdownDocument component", () => {
-  it("reuses stable nodes only in streaming mode and responds to mode changes", () => {
-    const initial = createDoc([["p", {}, "Stable paragraph"]]);
-    const [document, setDocument] = createSignal(initial);
-    const [streaming, setStreaming] = createSignal<boolean | undefined>(undefined);
-    const { container } = render(() => (
-      <MarkdownDocument value={document()} streaming={streaming()} />
-    ));
-    const wrapper = container.firstElementChild;
-    const firstParagraph = screen.getByText("Stable paragraph");
+it("renders an empty document and updates wrapper props", () => {
+  const [className, setClassName] = createSignal("  prose  ");
+  const [title, setTitle] = createSignal("Before");
+  const document = documentWith();
+  const { container } = render(() => (
+    <MarkdownDocument value={document} class={className()} title={title()} />
+  ));
 
-    setDocument(createDoc([...initial.nodes, ["p", {}, "Second paragraph"]]));
-    flush();
-    expect(screen.getByText("Stable paragraph")).not.toBe(firstParagraph);
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content prose" title="Before"></div>"`,
+  );
 
-    setStreaming(true);
-    flush();
-    const streamingParagraph = screen.getByText("Stable paragraph");
-    setDocument(createDoc([...initial.nodes, ["p", {}, "Updated paragraph"]]));
-    flush();
-    expect(screen.getByText("Stable paragraph")).toBe(streamingParagraph);
-    expect(screen.getByText("Updated paragraph")).toBeInTheDocument();
-    expect(wrapper).not.toHaveAttribute("streaming");
+  setClassName("compact");
+  setTitle("After");
+  flush();
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content compact" title="After"></div>"`,
+  );
+});
 
-    setStreaming(false);
-    flush();
-    const finalParagraph = screen.getByText("Stable paragraph");
-    setDocument(createDoc([...initial.nodes, ["p", {}, "Final paragraph"]]));
-    flush();
-    expect(screen.getByText("Stable paragraph")).not.toBe(finalParagraph);
-    expect(screen.getByText("Final paragraph")).toBeInTheDocument();
-    expect(container.firstElementChild).toBe(wrapper);
+it("renders ordinary AST nodes and omits comments", () => {
+  const document = documentWith(
+    [null, {}, "Hidden comment"],
+    [
+      "p",
+      {},
+      "Read ",
+      ["a", { href: "/guide", target: "_blank", rel: "noreferrer" }, "the guide"],
+      ".",
+    ],
+    [
+      "table",
+      {},
+      ["thead", {}, ["tr", {}, ["th", {}, "Name"]]],
+      ["tbody", {}, ["tr", {}, ["td", {}, "Ada"]]],
+    ],
+    ["p", {}, "Above", ["br", {}], "Below", ["img", { src: "/ada.png", alt: "Ada" }]],
+    ["hr", {}],
+  );
+  const { container } = render(() => <MarkdownDocument value={document} />);
+
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><p>Read <a href="/guide" target="_blank" rel="noreferrer">the guide</a>.</p><table><thead><tr><th>Name</th></tr></thead><tbody><tr><td>Ada</td></tr></tbody></table><p>Above<br>Below<img src="/ada.png" alt="Ada"></p><hr></div>"`,
+  );
+});
+
+it("renders fenced metadata and authored pre attributes without exposing AST metadata", async () => {
+  const document = await parseMarkdown(
+    '```js [demo.js] {1,3}\n  const x = 1;\n```\n\n<pre language="authored">raw</pre>',
+  );
+  const { container } = render(() => <MarkdownDocument value={document} />);
+
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><pre data-language="js" data-filename="demo.js" data-highlights="[1,3]"><code class="language-js">  const x = 1;</code></pre><pre language="authored">raw</pre></div>"`,
+  );
+});
+
+it("selects ProsePre before Pre or pre and keeps nested code native", async () => {
+  const document = await parseMarkdown("Inline `sample`.\n\n```js [demo.js] {1,3}\ncode\n```");
+  const { container } = render(() => (
+    <MarkdownDocument
+      value={document}
+      components={{
+        ProsePre: (props) => (
+          <pre data-language={props.language} data-highlights={props.highlights.join(",")}>
+            {props.children}
+          </pre>
+        ),
+        Pre: () => "Pre",
+        pre: () => "pre",
+        Code: (props) => <kbd>{props.children}</kbd>,
+      }}
+    />
+  ));
+
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><p>Inline <kbd>sample</kbd>.</p><pre data-language="js" data-highlights="1,3"><code class="language-js">code</code></pre></div>"`,
+  );
+});
+
+it("keeps code in a custom pre default slot native", () => {
+  const document = documentWith([
+    "pre",
+    {},
+    ["template", { name: "default" }, ["code", {}, "Slot code"]],
+  ]);
+  const { container } = render(() => (
+    <MarkdownDocument
+      value={document}
+      components={{
+        Pre: (props: { children?: JSX.Element }) => <pre>{props.children}</pre>,
+        Code: () => <kbd>Replacement</kbd>,
+      }}
+    />
+  ));
+
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><pre><code>Slot code</code></pre></div>"`,
+  );
+});
+
+it("uses an as attribute to select a PascalCase component", async () => {
+  const document = await parseMarkdown("> [!NOTE]\n> Hello");
+  const { container } = render(() => (
+    <MarkdownDocument
+      value={document}
+      components={{ Note: (props) => <aside>{props.children}</aside> }}
+    />
+  ));
+
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><aside>Hello</aside></div>"`,
+  );
+});
+
+it("renders named and default slots and prefers ordinary children over an explicit default", () => {
+  const Card = (props: { slotHeader?: JSX.Element; children?: JSX.Element }) => (
+    <article>
+      <header>{props.slotHeader}</header>
+      <main>{props.children}</main>
+    </article>
+  );
+  const document = documentWith(
+    [
+      "card",
+      {},
+      ["template", { "#header": "" }, "First"],
+      ["template", { name: "default" }, "Explicit"],
+    ],
+    [
+      "card",
+      {},
+      ["template", { name: "header" }, "Second"],
+      ["template", { "#default": "" }, "Overridden"],
+      ["p", {}, "Ordinary"],
+    ],
+    ["section", {}, ["template", { name: "header" }, "Omitted"], "Native"],
+  );
+  const { container } = render(() => <MarkdownDocument value={document} components={{ Card }} />);
+
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><article><header>First</header><main>Explicit</main></article><article><header>Second</header><main><p>Ordinary</p></main></article><section>Native</section></div>"`,
+  );
+});
+
+it("renders unnamed templates as ordinary children", () => {
+  const document = documentWith([
+    "card",
+    {},
+    ["template", {}, "Unnamed"],
+    ["template", { name: " " }, "Blank"],
+  ]);
+  const { container } = render(() => (
+    <MarkdownDocument
+      value={document}
+      components={{ Card: (props) => <article>{props.children}</article> }}
+    />
+  ));
+
+  expect(container.querySelector("article")?.innerHTML).toMatchInlineSnapshot(
+    `"<template></template><template name=" "></template>"`,
+  );
+});
+
+it("passes literal strings and typed bindings to components", async () => {
+  const document = await parseMarkdown(
+    ':probe{count="42" :number="42" :active="false" :items=\'[1,2]\' :name="data.name"}',
+  );
+  const { container } = render(() => (
+    <MarkdownDocument
+      value={document}
+      data={{ name: "Ada" }}
+      components={{
+        Probe: (props) => (
+          <output>
+            {JSON.stringify({
+              count: props.count,
+              number: props.number,
+              active: props.active,
+              items: props.items,
+              name: props.name,
+            })}
+          </output>
+        ),
+      }}
+    />
+  ));
+
+  expect(container.querySelector("output")?.textContent).toMatchInlineSnapshot(
+    `"{"count":"42","number":42,"active":false,"items":[1,2],"name":"Ada"}"`,
+  );
+});
+
+it("applies transforms in order before component selection and scopes props to descendants", () => {
+  const document = documentWith(
+    ["badge", {}, ["span", { ":title": "props.tone" }, "Child"]],
+    [
+      "div",
+      { title: "outer" },
+      ["section", { innerHTML: "ignored" }, ["span", { ":title": "props.title" }, "Nested"]],
+    ],
+    ["pre", { language: "js" }, ["code", { ":title": "props.language" }, "Code"]],
+  );
+  const { container } = render(() => (
+    <MarkdownDocument
+      value={document}
+      components={{ Pill: (props) => <aside data-tone={props.tone}>{props.children}</aside> }}
+      transformNode={[
+        ({ tag }) => (tag === "badge" ? { tag: "pill" } : undefined),
+        ({ tag, props }) => (tag === "pill" ? { props: { ...props, tone: "info" } } : undefined),
+      ]}
+    />
+  ));
+
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><aside data-tone="info"><span title="info">Child</span></aside><div title="outer"><section><span>Nested</span></section></div><pre data-language="js"><code title="js">Code</code></pre></div>"`,
+  );
+});
+
+it("omits children when a transform produces a native void element", () => {
+  const { container } = render(() => (
+    <MarkdownDocument
+      value={documentWith(["p", {}, "AST child"])}
+      transformNode={() => ({
+        tag: "input",
+        props: { placeholder: "Value", children: "Prop child" },
+      })}
+    />
+  ));
+
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><input placeholder="Value"></div>"`,
+  );
+  expect(container.textContent).toBe("");
+});
+
+it.each([false, true])("updates nested runtime bindings with streaming=%s", (streaming) => {
+  const document = documentWith(["p", {}, ["span", { ":title": "data.title" }, "Paragraph"]]);
+  const [data, setData] = createSignal({ title: "Before" });
+  const { container } = render(() => (
+    <MarkdownDocument value={document} data={data()} streaming={streaming} />
+  ));
+
+  expect(container.querySelector("span")?.getAttribute("title")).toBe("Before");
+  setData({ title: "After" });
+  flush();
+  expect(container.querySelector("span")?.getAttribute("title")).toBe("After");
+});
+
+it("renders updates across streaming mode changes", () => {
+  const shared = documentWith(["p", {}, "Retained"]);
+  const [document, setDocument] = createSignal(shared);
+  const [streaming, setStreaming] = createSignal(false);
+  const { container } = render(() => (
+    <MarkdownDocument value={document()} streaming={streaming()} />
+  ));
+
+  setStreaming(true);
+  flush();
+  setDocument(documentWith(...shared.nodes, ["p", {}, "Streaming"]));
+  flush();
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><p>Retained</p><p>Streaming</p></div>"`,
+  );
+
+  setStreaming(false);
+  flush();
+  setDocument(documentWith(...shared.nodes, ["p", {}, "Final"]));
+  flush();
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><p>Retained</p><p>Final</p></div>"`,
+  );
+});
+
+it("renders surrounding content while a lazy component loads", async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
   });
-
-  it.each([false, true])("updates runtime attributes with streaming=%s", (streaming) => {
-    const document = createDoc([["p", { ":title": "data.title" }, "Paragraph"]]);
-    const [data, setData] = createSignal({ title: "Initial title" });
-
-    render(() => <MarkdownDocument value={document} data={data()} streaming={streaming} />);
-    expect(screen.getByText("Paragraph")).toHaveAttribute("title", "Initial title");
-
-    setData({ title: "Updated title" });
-    flush();
-    expect(screen.getByText("Paragraph")).toHaveAttribute("title", "Updated title");
+  const Card = lazy(async () => {
+    await pending;
+    return { default: (props: { children?: JSX.Element }) => <article>{props.children}</article> };
   });
+  const document = documentWith(["p", {}, "Ready"], ["card", {}, "Loaded"]);
+  const { container } = render(() => (
+    <Loading fallback={<p>Outer fallback</p>}>
+      <MarkdownDocument value={document} components={{ Card }} />
+    </Loading>
+  ));
 
-  it("applies ordered transforms before component lookup and scopes transformed props to children", () => {
-    const doc = createDoc([["badge", {}, ["span", { ":title": "props.tone" }]]]);
-    const Pill: Component<{ tone?: string; children?: JSX.Element }> = (props) => (
-      <section data-tone={props.tone}>{props.children}</section>
+  try {
+    expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+      `"<div class="comark-content"><p>Ready</p></div>"`,
     );
-    const { container } = render(() => (
-      <MarkdownDocument
-        value={doc}
-        components={{ pill: Pill }}
-        transformNode={[
-          ({ tag }) => (tag === "badge" ? { tag: "pill" } : undefined),
-          ({ tag, props }) => (tag === "pill" ? { props: { ...props, tone: "info" } } : undefined),
-        ]}
-      />
-    ));
-    expect(container.querySelector('section[data-tone="info"] span')).toHaveAttribute(
-      "title",
-      "info",
-    );
-  });
-
-  it("renders transformed native void elements without children", () => {
-    const doc = createDoc([["p", {}, "ignored"]]);
-    const { container } = render(() => (
-      <MarkdownDocument
-        value={doc}
-        transformNode={({ tag }) =>
-          tag === "p"
-            ? { tag: "input", props: { placeholder: "test", children: "ignored" } }
-            : undefined
-        }
-      />
-    ));
-    expect(container.querySelector("input")).toHaveAttribute("placeholder", "test");
-    expect(container).not.toHaveTextContent("ignored");
-  });
-
-  describe("Wrapper div and class handling", () => {
-    it("renders container div with comark-content class by default", () => {
-      const doc = createDoc([["p", {}, "Hello"]]);
-      const { container } = render(() => <MarkdownDocument value={doc} />);
-
-      const wrapper = container.firstElementChild;
-      expect(wrapper).toBeInTheDocument();
-      expect(wrapper?.tagName.toLowerCase()).toBe("div");
-      expect(wrapper).toHaveClass("comark-content");
-    });
-
-    it("appends custom class to comark-content", () => {
-      const doc = createDoc([["p", {}, "Hello"]]);
-      const { container } = render(() => (
-        <MarkdownDocument value={doc} class="prose dark:prose-invert" />
-      ));
-
-      const wrapper = container.firstElementChild;
-      expect(wrapper).toHaveClass("comark-content", "prose", "dark:prose-invert");
-    });
-
-    it("trims whitespace from classes", () => {
-      const doc = createDoc([]);
-      const { container } = render(() => <MarkdownDocument value={doc} class="  custom-class  " />);
-
-      const wrapper = container.firstElementChild;
-      expect(wrapper).toHaveClass("comark-content", "custom-class");
-    });
-  });
-
-  describe("Native HTML elements rendering", () => {
-    it("maps fenced code metadata to native data attributes", async () => {
-      const doc = await parseMarkdown("```js [demo.js] {1,3}\nconst x = 1;\n```");
-      const { container } = render(() => <MarkdownDocument value={doc} />);
-      const pre = container.querySelector("pre");
-      expect(pre).toHaveAttribute("data-language", "js");
-      expect(pre).toHaveAttribute("data-filename", "demo.js");
-      expect(pre).toHaveAttribute("data-highlights", "[1,3]");
-      expect(pre).not.toHaveAttribute("language");
-      expect(pre).not.toHaveAttribute("highlights");
-    });
-
-    it("preserves authored HTML pre attributes and hides internal metadata", async () => {
-      const doc = await parseMarkdown('<pre language="authored">raw</pre>');
-      const { container } = render(() => <MarkdownDocument value={doc} />);
-      const pre = container.querySelector("pre");
-      expect(pre).toHaveAttribute("language", "authored");
-      expect(pre).not.toHaveAttribute("data-language");
-      expect(pre?.getAttributeNames()).not.toContain("$");
-    });
-
-    it("renders headings, paragraphs, and inline formatting", () => {
-      const doc = createDoc([
-        ["h1", { id: "title" }, "Heading 1"],
-        ["h2", {}, "Heading 2"],
-        ["p", {}, "Plain text, ", ["strong", {}, "bold text"], ", and ", ["em", {}, "italic text"]],
-      ]);
-
-      render(() => <MarkdownDocument value={doc} />);
-
-      const h1 = screen.getByRole("heading", { level: 1 });
-      expect(h1).toHaveTextContent("Heading 1");
-      expect(h1).toHaveAttribute("id", "title");
-
-      const h2 = screen.getByRole("heading", { level: 2 });
-      expect(h2).toHaveTextContent("Heading 2");
-
-      expect(screen.getByText("bold text")).toBeInTheDocument();
-      expect(screen.getByText("bold text").tagName.toLowerCase()).toBe("strong");
-      expect(screen.getByText("italic text")).toBeInTheDocument();
-      expect(screen.getByText("italic text").tagName.toLowerCase()).toBe("em");
-    });
-
-    it("renders links with attributes", () => {
-      const doc = createDoc([
-        [
-          "p",
-          {},
-          ["a", { href: "https://example.com", target: "_blank", rel: "noreferrer" }, "Link"],
-        ],
-      ]);
-
-      render(() => <MarkdownDocument value={doc} />);
-
-      const link = screen.getByRole("link", { name: "Link" });
-      expect(link).toBeInTheDocument();
-      expect(link).toHaveAttribute("href", "https://example.com");
-      expect(link).toHaveAttribute("target", "_blank");
-      expect(link).toHaveAttribute("rel", "noreferrer");
-    });
-
-    it("renders lists and tables", () => {
-      const doc = createDoc([
-        ["ul", {}, ["li", {}, "Item 1"], ["li", {}, "Item 2"]],
-        [
-          "table",
-          {},
-          ["thead", {}, ["tr", {}, ["th", {}, "Header"]]],
-          ["tbody", {}, ["tr", {}, ["td", {}, "Cell"]]],
-        ],
-      ]);
-
-      render(() => <MarkdownDocument value={doc} />);
-
-      const listItems = screen.getAllByRole("listitem");
-      expect(listItems).toHaveLength(2);
-      expect(listItems[0]).toHaveTextContent("Item 1");
-      expect(listItems[1]).toHaveTextContent("Item 2");
-
-      expect(screen.getByRole("table")).toBeInTheDocument();
-      expect(screen.getByRole("columnheader")).toHaveTextContent("Header");
-      expect(screen.getByRole("cell")).toHaveTextContent("Cell");
-    });
-  });
-
-  describe("Void elements handling", () => {
-    it("renders hr, br, and img without children", () => {
-      const doc = createDoc([
-        ["hr", { class: "divider" }],
-        ["p", {}, "Line 1", ["br", {}], "Line 2"],
-        ["img", { src: "test.png", alt: "Test Image" }],
-      ]);
-
-      const { container } = render(() => <MarkdownDocument value={doc} />);
-
-      const hr = container.querySelector("hr");
-      expect(hr).toBeInTheDocument();
-      expect(hr).toHaveClass("divider");
-
-      const br = container.querySelector("p br");
-      expect(br).toBeInTheDocument();
-
-      const img = screen.getByRole("img", { name: "Test Image" });
-      expect(img).toBeInTheDocument();
-      expect(img).toHaveAttribute("src", "test.png");
-    });
-  });
-
-  describe("Custom components", () => {
-    it("keeps code in a custom pre default slot native", () => {
-      const Pre: Component<{ children?: JSX.Element }> = (props) => <pre>{props.children}</pre>;
-      const doc = createDoc([["pre", {}, ["template", { name: "default" }, ["code", {}, "code"]]]]);
-      const { container } = render(() => (
-        <MarkdownDocument value={doc} components={{ Pre, Code: () => "replaced" }} />
-      ));
-      expect(container.querySelector("pre code")).toHaveTextContent("code");
-    });
-
-    it("prefers ProsePre over Pre and pre and passes typed code block props", async () => {
-      const doc = await parseMarkdown("```js [demo.js] {1,3}\ncode\n```");
-      const Code: Component<{ language: string; highlights: number[] }> = (props) => (
-        <output>
-          {props.language}:{props.highlights.join(",")}
-        </output>
-      );
-      render(() => (
-        <MarkdownDocument
-          value={doc}
-          components={{ ProsePre: Code, Pre: () => "wrong", pre: () => "wrong" }}
-        />
-      ));
-      expect(screen.getByRole("status")).toHaveTextContent("js:1,3");
-    });
-
-    it("resolves alert as attributes using PascalCase components", async () => {
-      const doc = await parseMarkdown("> [!NOTE]\n> Hello");
-      const Note: Component<{ children?: JSX.Element }> = (props) => (
-        <aside>{props.children}</aside>
-      );
-      render(() => <MarkdownDocument value={doc} components={{ Note }} />);
-      expect(screen.getByRole("complementary")).toHaveTextContent("Hello");
-    });
-
-    it("renders mapped custom components instead of native elements", () => {
-      const CustomCard: Component<{ title: string; children?: JSX.Element }> = (props) => (
-        <article class="custom-card" aria-label={props.title}>
-          <h3>{props.title}</h3>
-          <div class="card-body">{props.children}</div>
-        </article>
-      );
-
-      const doc = createDoc([["custom-card", { title: "Card Title" }, ["p", {}, "Card Content"]]]);
-
-      render(() => <MarkdownDocument value={doc} components={{ "custom-card": CustomCard }} />);
-
-      const card = screen.getByRole("article", { name: "Card Title" });
-      expect(card).toBeInTheDocument();
-      expect(screen.getByRole("heading", { level: 3 })).toHaveTextContent("Card Title");
-      expect(screen.getByText("Card Content")).toBeInTheDocument();
-    });
-
-    it("overrides standard tags with custom components", () => {
-      const CustomHeading: Component<{ children?: JSX.Element }> = (props) => (
-        <h1 class="custom-h1">-- {props.children} --</h1>
-      );
-
-      const doc = createDoc([["h1", {}, "Overridden Title"]]);
-
-      render(() => <MarkdownDocument value={doc} components={{ h1: CustomHeading }} />);
-
-      const heading = screen.getByRole("heading", { level: 1 });
-      expect(heading).toHaveClass("custom-h1");
-      expect(heading).toHaveTextContent("-- Overridden Title --");
-    });
-
-    it("does not replace tags inside pre elements with custom components", () => {
-      const CustomCode: Component<{ children?: JSX.Element }> = (props) => (
-        <span class="custom-code" data-testid="custom-code">
-          {props.children}
-        </span>
-      );
-
-      const doc = createDoc([
-        ["p", {}, ["code", {}, "inline code"]],
-        ["pre", {}, ["code", { class: "language-js" }, "block code"]],
-      ]);
-
-      const { container } = render(() => (
-        <MarkdownDocument value={doc} components={{ code: CustomCode }} />
-      ));
-
-      // Outside pre: replaced by CustomCode
-      const customCode = screen.getByTestId("custom-code");
-      expect(customCode).toHaveTextContent("inline code");
-
-      // Inside pre: remains native <code>
-      const preCode = container.querySelector("pre code");
-      expect(preCode).toBeInTheDocument();
-      expect(preCode).toHaveClass("language-js");
-      expect(preCode).toHaveTextContent("block code");
-      expect(container.querySelector("pre .custom-code")).toBeNull();
-    });
-
-    it("renders custom components loaded via lazy()", async () => {
-      const LazyCard = lazy(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        const Component: Component<{ title: string; children?: JSX.Element }> = (props) => (
-          <div class="lazy-card" role="region" aria-label={props.title}>
-            <h4>{props.title}</h4>
-            <div class="lazy-content">{props.children}</div>
-          </div>
-        );
-        return { default: Component };
-      });
-
-      const doc = createDoc([
-        ["lazy-card", { title: "Lazy Title" }, ["p", {}, "Lazy Child Content"]],
-      ]);
-
-      render(() => <MarkdownDocument value={doc} components={{ "lazy-card": LazyCard }} />);
-
-      const card = await screen.findByRole("region", { name: "Lazy Title" });
-      expect(card).toBeInTheDocument();
-      expect(screen.getByRole("heading", { level: 4 })).toHaveTextContent("Lazy Title");
-      expect(screen.getByText("Lazy Child Content")).toBeInTheDocument();
-    });
-  });
-
-  describe("Slots partitioning", () => {
-    it("passes template #header content as the slotHeader prop", () => {
-      const Card: Component<{ slotHeader?: JSX.Element }> = (props) => (
-        <header>{props.slotHeader}</header>
-      );
-      const doc = createDoc([["card", {}, ["template", { "#header": "" }, "Header"]]]);
-      render(() => <MarkdownDocument value={doc} components={{ Card }} />);
-      expect(screen.getByRole("banner")).toHaveTextContent("Header");
-    });
-
-    it("omits named slot templates from native elements", () => {
-      const doc = createDoc([["div", {}, ["template", { name: "hidden" }, "Hidden"], "Visible"]]);
-      render(() => <MarkdownDocument value={doc} />);
-      expect(screen.getByText("Visible")).toBeInTheDocument();
-      expect(screen.queryByText("Hidden")).toBeNull();
-    });
-
-    it("passes default children and named slots to custom component", () => {
-      const LayoutComponent: Component<{
-        children?: JSX.Element;
-        slotHeader?: JSX.Element;
-        slotFooter?: JSX.Element;
-      }> = (props) => (
-        <div class="layout">
-          <header class="header">{props.slotHeader}</header>
-          <main class="main">{props.children}</main>
-          <footer class="footer">{props.slotFooter}</footer>
-        </div>
-      );
-
-      const doc = createDoc([
-        [
-          "layout",
-          {},
-          ["template", { name: "header" }, ["h1", {}, "Header Content"]],
-          ["p", {}, "Body Paragraph"],
-          ["template", { name: "footer" }, ["p", {}, "Footer Content"]],
-        ],
-      ]);
-
-      render(() => <MarkdownDocument value={doc} components={{ layout: LayoutComponent }} />);
-
-      expect(screen.getByRole("banner")).toHaveTextContent("Header Content");
-      expect(screen.getByRole("main")).toHaveTextContent("Body Paragraph");
-      expect(screen.getByRole("contentinfo")).toHaveTextContent("Footer Content");
-    });
-
-    it("supports explicit default slot template when no other children exist", () => {
-      const LayoutComponent: Component<{ children?: JSX.Element }> = (props) => (
-        <div class="default-slot-wrapper">{props.children}</div>
-      );
-
-      const doc = createDoc([
-        ["layout", {}, ["template", { name: "default" }, ["p", {}, "Explicit Default Content"]]],
-      ]);
-
-      render(() => <MarkdownDocument value={doc} components={{ layout: LayoutComponent }} />);
-
-      expect(screen.getByText("Explicit Default Content")).toBeInTheDocument();
-    });
-
-    it("prefers normal children over explicit template default slot", () => {
-      const LayoutComponent: Component<{ children?: JSX.Element }> = (props) => (
-        <div class="preferred-wrapper">{props.children}</div>
-      );
-
-      const doc = createDoc([
-        [
-          "layout",
-          {},
-          ["template", { name: "default" }, ["p", {}, "Ignored Default"]],
-          ["p", {}, "Preferred Child"],
-        ],
-      ]);
-
-      render(() => <MarkdownDocument value={doc} components={{ layout: LayoutComponent }} />);
-
-      expect(screen.getByText("Preferred Child")).toBeInTheDocument();
-      expect(screen.queryByText("Ignored Default")).toBeNull();
-    });
-
-    it("treats template without valid name attribute as regular child rather than named slot", () => {
-      const LayoutComponent: Component<{ children?: JSX.Element; slotHeader?: JSX.Element }> = (
-        props,
-      ) => (
-        <div class="wrapper">
-          <div class="named-slot">{props.slotHeader}</div>
-          <div class="default-slot">{props.children}</div>
-        </div>
-      );
-
-      const doc = createDoc([
-        [
-          "layout",
-          {},
-          ["template", {}, ["p", {}, "No Name"]],
-          ["template", { name: "   " }, ["p", {}, "Whitespace Name"]],
-        ],
-      ]);
-
-      const { container } = render(() => (
-        <MarkdownDocument value={doc} components={{ layout: LayoutComponent }} />
-      ));
-
-      // Neither template has a valid name, so neither becomes a named slot
-      expect(container.querySelector(".named-slot")?.children.length).toBe(0);
-      // Both are placed in the default slot (as children)
-      expect(container.querySelector(".default-slot")?.children.length).toBe(2);
-    });
-  });
-
-  describe("Data binding and prop resolution", () => {
-    it("preserves literal strings and resolves typed prop bindings", async () => {
-      const doc = await parseMarkdown(':probe{count="42" :active="false" :items=\'[1,2]\'}');
-      const Probe: Component<Record<string, unknown>> = (props) => (
-        <output>
-          {JSON.stringify({ count: props.count, active: props.active, items: props.items })}
-        </output>
-      );
-      render(() => <MarkdownDocument value={doc} components={{ Probe }} />);
-      expect(JSON.parse(screen.getByRole("status").textContent ?? "null")).toEqual({
-        count: "42",
-        active: false,
-        items: [1, 2],
-      });
-    });
-
-    it("does not inherit outer props when an element's own attributes are removed", () => {
-      const doc = createDoc([
-        [
-          "div",
-          { title: "outer" },
-          ["section", { innerHTML: "ignored" }, ["span", { ":title": "props.title" }, "child"]],
-        ],
-      ]);
-      const { container } = render(() => <MarkdownDocument value={doc} />);
-      expect(container.querySelector("span")).not.toHaveAttribute("title");
-      expect(container.querySelector("section")).toHaveTextContent("child");
-    });
-
-    it("resolves descendant prop bindings using the parent's original attributes", () => {
-      const doc = createDoc([
-        ["pre", { language: "js" }, ["code", { ":title": "props.language" }, "code"]],
-      ]);
-      const { container } = render(() => <MarkdownDocument value={doc} />);
-      expect(container.querySelector("code")).toHaveAttribute("title", "js");
-    });
-
-    it("resolves dynamic data attributes prefixed with colon", () => {
-      const UserCard: Component<{ name?: string; age?: number }> = (props) => (
-        <div class="user-card" aria-label="user-info">
-          <span>{props.name}</span>:<span>{props.age}</span>
-        </div>
-      );
-
-      const doc: MarkdownDocumentType = {
-        nodes: [["user-card", { ":name": "data.user.name", ":age": "data.user.age" }]],
-        frontmatter: {},
-        meta: {},
-      };
-
-      const runtimeData = {
-        user: { name: "Alice", age: 30 },
-      };
-
-      render(() => (
-        <MarkdownDocument value={doc} data={runtimeData} components={{ "user-card": UserCard }} />
-      ));
-
-      const card = screen.getByRole("generic", { name: "user-info" });
-      expect(card).toHaveTextContent("Alice:30");
-    });
-
-    it("parses JSON attribute values when resolveAttributes is used", () => {
-      const CustomList: Component<{ count?: number; active?: boolean }> = (props) => (
-        <div
-          class="custom-list"
-          data-active={String(props.active)}
-          data-count={String(props.count)}
-          data-testid="custom-list"
-        />
-      );
-
-      const doc = createDoc([["custom-list", { count: "42", active: "true" }]]);
-
-      render(() => <MarkdownDocument value={doc} components={{ "custom-list": CustomList }} />);
-
-      const el = screen.getByTestId("custom-list");
-      expect(el).toHaveAttribute("data-count", "42");
-      expect(el).toHaveAttribute("data-active", "true");
-    });
-  });
-
-  describe("Edge cases and resilience", () => {
-    it("omits comment nodes from rendered content", () => {
-      const doc = createDoc([[null, {}, "comment"]]);
-      const { container } = render(() => <MarkdownDocument value={doc} />);
-      expect(container.firstElementChild).toBeEmptyDOMElement();
-    });
-    it("renders safely when nodes array is empty", () => {
-      const doc = createDoc([]);
-      const { container } = render(() => <MarkdownDocument value={doc} />);
-
-      expect(container.firstElementChild).toHaveClass("comark-content");
-      expect(container.firstElementChild?.children.length).toBe(0);
-    });
-
-    it("handles null, undefined, or empty child nodes gracefully", () => {
-      const doc = createDoc([
-        ["p", {}, "Hello", null as unknown as string, undefined as unknown as string, ""],
-      ]);
-      render(() => <MarkdownDocument value={doc} />);
-
-      expect(screen.getByText("Hello")).toBeInTheDocument();
-    });
-
-    it("renders without error when components and data are omitted", () => {
-      const doc = createDoc([["p", {}, "Standard markdown"]]);
-      render(() => <MarkdownDocument value={doc} />);
-
-      expect(screen.getByText("Standard markdown")).toBeInTheDocument();
-    });
-  });
+  } finally {
+    release();
+  }
+
+  await screen.findByRole("article");
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><p>Ready</p><article>Loaded</article></div>"`,
+  );
 });
