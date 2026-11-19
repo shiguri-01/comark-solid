@@ -1,8 +1,7 @@
 import { defineConfig } from "bumpp";
 
 export default defineConfig({
-  release: "prerelease",
-  preid: "next",
+  release: "patch",
   noGitCheck: false,
   push: false,
 });
