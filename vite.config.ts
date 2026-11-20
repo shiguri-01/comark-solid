@@ -1,5 +1,6 @@
-import solidPlugin from "@solidjs/vite-plugin";
+import solidVite from "@solidjs/vite-plugin";
 import solidEslint from "eslint-plugin-solid/configs/v2";
+import solidRolldown from "unplugin-solid/rolldown";
 import { defineConfig, lazyPlugins } from "vite-plus";
 import { playwright } from "vite-plus/test/browser-playwright";
 
@@ -7,18 +8,40 @@ export default defineConfig({
   staged: {
     "*": "vp check --fix",
   },
-  plugins: lazyPlugins(() => [solidPlugin()]),
-  pack: {
-    platform: "neutral",
-    plugins: [
-      solidPlugin({
-        refresh: false,
-      }),
-    ],
-    dts: {
-      generator: "tsgo",
+  plugins: lazyPlugins(() => [solidVite()]),
+  pack: [
+    {
+      name: "browser",
+      platform: "neutral",
+      entry: ["src/index.ts"],
+      outDir: "dist/browser",
+      dts: { generator: "tsgo" },
+      plugins: [
+        solidRolldown({
+          solid: {
+            generate: "dom",
+            hydratable: true,
+          },
+        }),
+      ],
     },
-  },
+    {
+      name: "server",
+      platform: "neutral",
+      entry: ["src/index.ts"],
+      outDir: "dist/server",
+      dts: false,
+      plugins: [
+        solidRolldown({
+          ssr: true,
+          solid: {
+            generate: "ssr",
+            hydratable: true,
+          },
+        }),
+      ],
+    },
+  ],
   lint: {
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }, "eslint-plugin-solid"],
     settings: solidEslint.settings,

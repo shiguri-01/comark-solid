@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
+      - name: Build
+        run: vp run build
+
       - name: Check
         run: vp run check
 
@@ -34,6 +37,3 @@ jobs:
 
       - name: Test
         run: vp run test
-
-      - name: Build
-        run: vp run build

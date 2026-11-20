@@ -7,7 +7,6 @@
     "moduleDetection": "force",
     "module": "preserve",
     "moduleResolution": "bundler",
-    "customConditions": ["solid"],
     "resolveJsonModule": true,
     "types": [],
     "strict": true,

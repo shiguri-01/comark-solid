@@ -22,16 +22,18 @@
     "url": "git+https://github.com/shiguri-01/comark-solid.git"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "type": "module",
-  "types": "./dist/index.d.ts",
+  "types": "./dist/browser/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "solid": "./src/index.ts",
-      "default": "./dist/index.js"
+      "types": "./dist/browser/index.d.ts",
+      "browser": "./dist/browser/index.js",
+      "worker": "./dist/server/index.js",
+      "deno": "./dist/server/index.js",
+      "node": "./dist/server/index.js",
+      "default": "./dist/browser/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -59,6 +61,7 @@
     "playwright": "^1.65.1",
     "solid-js": "2.0.1",
     "typescript": "^7.0.2",
+    "unplugin-solid": "^3.0.0",
     "vite": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:"
