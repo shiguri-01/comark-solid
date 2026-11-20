@@ -110,6 +110,38 @@ it("keeps code in a custom pre default slot native", () => {
   );
 });
 
+it("keeps elements nested deeper than a direct child of pre native", () => {
+  const document = documentWith(["pre", {}, ["code", {}, ["span", {}, "hi"]]]);
+  const { container } = render(() => (
+    <MarkdownDocument
+      value={document}
+      components={{
+        Span: (props: { children?: JSX.Element }) => <mark>{props.children}</mark>,
+      }}
+    />
+  ));
+
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><pre><code><span>hi</span></code></pre></div>"`,
+  );
+});
+
+it("keeps markdown nested inside an inline pre native", async () => {
+  const document = await parseMarkdown("Use <pre>**a `x` b**</pre> inline\n");
+  const { container } = render(() => (
+    <MarkdownDocument
+      value={document}
+      components={{
+        Code: (props: { children?: JSX.Element }) => <kbd>{props.children}</kbd>,
+      }}
+    />
+  ));
+
+  expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
+    `"<div class="comark-content"><p>Use <pre><strong>a <code>x</code> b</strong></pre> inline</p></div>"`,
+  );
+});
+
 it("uses an as attribute to select a PascalCase component", async () => {
   const document = await parseMarkdown("> [!NOTE]\n> Hello");
   const { container } = render(() => (

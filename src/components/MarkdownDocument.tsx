@@ -72,11 +72,14 @@ export interface MarkdownDocumentProps extends Omit<ComponentProps<"div">, "chil
 type LocalContext = {
   parent: Node | undefined;
   renderData: NodeRenderData;
+  /** 祖先に pre があるか。直接の親だけでなく子孫すべてに伝播する */
+  inPre: boolean;
 };
 
 const DEFAULT_LOCAL_CONTEXT: LocalContext = {
   parent: undefined,
   renderData: { frontmatter: {}, meta: {}, data: {}, props: {} },
+  inPre: false,
 };
 
 type ElementNode = {
@@ -182,13 +185,16 @@ function createNodeRenderer(
       hasTransformedProps: transformed !== undefined && transformed.props !== ownProps,
     };
 
-    // preタグ内のテキストはそのまま表示する
-    const isInPre = context.parent !== undefined && getTag(context.parent) === "pre";
+    // preタグ内の要素はそのまま表示する。直接の子だけでなく、
+    // 祖先のどこかに pre があれば子孫すべてが対象になる
+    const isInPre =
+      context.inPre || (context.parent !== undefined && getTag(context.parent) === "pre");
     const component = isInPre ? null : resolveComponent(element, components);
+    const innerContext: LocalContext = { ...context, inPre: isInPre || element.tag === "pre" };
 
     return component
-      ? renderCustomComponent(component, context)
-      : renderNativeElement(element, context);
+      ? renderCustomComponent(component, innerContext)
+      : renderNativeElement(element, innerContext);
   }
 
   function renderCustomComponent(element: ComponentNode, context: LocalContext) {
@@ -201,7 +207,7 @@ function createNodeRenderer(
       element.hasTransformedProps,
     );
 
-    const slots = partitionIntoSlots(node, childRenderData);
+    const slots = partitionIntoSlots(node, childRenderData, context.inPre);
     const CustomComponent = dynamic(() => component);
 
     return (
@@ -233,7 +239,7 @@ function createNodeRenderer(
 
     const children = getChildren(node)
       .filter((child) => !getSlotName(child))
-      .map((child) => renderNode(child, { parent: node, renderData }))
+      .map((child) => renderNode(child, { parent: node, renderData, inPre: context.inPre }))
       .filter(Boolean);
 
     return <Component {...props}>{children}</Component>;
@@ -242,6 +248,7 @@ function createNodeRenderer(
   function partitionIntoSlots(
     node: Node,
     childRenderData: NodeRenderData,
+    inPre: boolean,
   ): Record<string, JSX.Element[]> {
     const defaultSlot: JSX.Element[] = [];
     const namedSlots: Record<string, JSX.Element[]> = {};
@@ -257,14 +264,16 @@ function createNodeRenderer(
       if (slotName) {
         const propName = getSlotPropName(slotName);
         namedSlots[propName] = getChildren(child)
-          .map((slotChild) => renderNode(slotChild, { parent: node, renderData: childRenderData }))
+          .map((slotChild) =>
+            renderNode(slotChild, { parent: node, renderData: childRenderData, inPre }),
+          )
           .filter(Boolean);
 
         continue;
       }
 
       // default slot
-      const rendered = renderNode(child, { parent: node, renderData: childRenderData });
+      const rendered = renderNode(child, { parent: node, renderData: childRenderData, inPre });
       if (rendered) {
         defaultSlot.push(rendered);
       }
