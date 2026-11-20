@@ -26,11 +26,11 @@ jobs:
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
-      - name: Check
-        run: vp run check
-
       - name: Build
         run: vp run build
+
+      - name: Check
+        run: vp run check
 
       - name: Install Chromium for browser tests
         run: vp exec playwright install --with-deps --only-shell chromium
