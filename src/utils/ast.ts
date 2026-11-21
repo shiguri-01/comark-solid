@@ -1,25 +1,18 @@
-import type { Node } from "comark";
+import type { ElementNode, Node } from "comark";
 
-export function getTag(node: Node): string | null {
-  if (Array.isArray(node) && node.length >= 1 && typeof node[0] === "string") {
-    return node[0];
-  }
-
-  return null;
+export function getTag(node: ElementNode): string {
+  return node[0];
 }
 
-export function getAttributes(node: Node): Record<string, unknown> {
-  if (Array.isArray(node) && node.length >= 2) {
-    return (node[1] as Record<string, unknown>) || {};
-  }
-
-  return {};
+export function getAttributes(node: ElementNode): Record<string, unknown> {
+  return node[1];
 }
 
-export function getChildren(node: Node): Node[] {
-  if (Array.isArray(node) && node.length > 2) {
-    return node.slice(2) as Node[];
-  }
+export function getChildren(node: ElementNode): Node[] {
+  const [, , ...children] = node;
+  return children;
+}
 
-  return [];
+export function isElementNode(node: Node): node is ElementNode {
+  return Array.isArray(node) && node.length >= 1 && typeof node[0] === "string";
 }
