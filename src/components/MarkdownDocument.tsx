@@ -1,6 +1,6 @@
 import { dynamic, type ComponentProps, type JSX } from "@solidjs/web";
 import type {
-  ElementNode as ComarkElementNode,
+  ElementNode,
   MarkdownDocument as MarkdownDocumentType,
   Node,
   NodeRenderData,
@@ -21,10 +21,9 @@ import {
   type ValidComponent,
   omit,
   For,
-  untrack,
 } from "solid-js";
 
-import { getAttributes, getChildren, getTag } from "../utils/ast";
+import { getAttributes, getChildren, getTag, isElementNode } from "../utils/ast";
 
 export interface MarkdownDocumentProps extends Omit<ComponentProps<"div">, "children"> {
   /**
@@ -69,52 +68,44 @@ export interface MarkdownDocumentProps extends Omit<ComponentProps<"div">, "chil
   class?: JSX.ClassValue;
 }
 
-type LocalContext = {
-  parent: Node | undefined;
-  renderData: NodeRenderData;
-  /** 祖先に pre があるか。直接の親だけでなく子孫すべてに伝播する */
-  inPre: boolean;
+type RenderContext = {
+  readonly parent: ElementNode | undefined;
+  readonly renderData: NodeRenderData;
+  readonly inPre: boolean;
 };
 
-const DEFAULT_LOCAL_CONTEXT: LocalContext = {
-  parent: undefined,
-  renderData: { frontmatter: {}, meta: {}, data: {}, props: {} },
-  inPre: false,
+type TransformedNode = ReturnType<typeof applyNodeTransforms>;
+
+type BaseElement = {
+  readonly node: ElementNode;
+  readonly ownProps: Record<string, unknown>;
+  readonly transformed: TransformedNode | undefined;
 };
 
-type ElementNode = {
-  readonly tag: string;
-  readonly node: Node;
-  readonly props: Record<string, unknown>;
-  readonly hasTransformedProps: boolean;
+type NativeElement = BaseElement & {
+  readonly kind: "native";
 };
 
-type ComponentNode = ElementNode & {
+type ComponentElement = BaseElement & {
+  readonly kind: "component";
   readonly component: ValidComponent;
 };
 
-function hasDynamicAttributes(node: Node): boolean {
-  if (typeof node === "string") return false;
-  return (
-    Object.keys(getAttributes(node)).some((key) => key.startsWith(":")) ||
-    getChildren(node).some(hasDynamicAttributes)
-  );
+type ResolvedElement = NativeElement | ComponentElement;
+
+function getElementProps(element: BaseElement): Record<string, unknown> {
+  return element.transformed?.props ?? element.ownProps;
+}
+
+function getElementTag(element: BaseElement): string {
+  return element.transformed?.tag ?? element.node[0];
 }
 
 function resolveProps(node: Node, renderData: NodeRenderData) {
   return resolveAttributes(getAttributes(node), renderData, { parseJson: true });
 }
 
-function scopeRenderData(
-  node: Node,
-  props: Record<string, unknown>,
-  renderData: NodeRenderData,
-  hasTransformedProps: boolean,
-) {
-  return hasTransformedProps || Object.keys(getAttributes(node)).some((key) => key !== "$")
-    ? { ...renderData, props }
-    : renderData;
-}
+const METADATA_ATTRIBUTES_KEY = "$";
 
 function getSlotName(node: Node): string | null {
   if (getTag(node) !== "template") {
@@ -143,113 +134,156 @@ function getSlotPropName(slotName: string): string {
 }
 
 function resolveComponent(
-  element: ElementNode,
+  element: BaseElement,
   components: Record<string, ValidComponent>,
-): ComponentNode | null {
+): ValidComponent | null {
   function lookup(tag: string) {
     const name = pascalCase(tag);
-    return components[`Prose${name}`] || components[name] || components[tag];
+    const proseName = `Prose${name}`;
+
+    return components[proseName] || components[name] || components[tag];
   }
-  const as = element.props.as;
-  const component = (typeof as === "string" && lookup(as)) || lookup(element.tag);
+
+  const as = getElementProps(element).as;
+  const component = (typeof as === "string" && lookup(as)) || lookup(getElementTag(element));
   if (!component) return null;
 
-  return { ...element, component };
+  return component;
 }
 
 function createNodeRenderer(
   components: Record<string, ValidComponent>,
   transformNode?: NodeTransform | readonly NodeTransform[],
 ) {
-  function renderNode(node: Node, local: Partial<LocalContext> = {}): JSX.Element {
+  function renderNode(node: Node, context: RenderContext): JSX.Element {
     if (typeof node === "string") {
       return node;
     }
 
-    const nodeTag = getTag(node);
-    if (!nodeTag) return null;
+    if (!isElementNode(node)) {
+      return null;
+    }
 
-    const context = { ...DEFAULT_LOCAL_CONTEXT, ...local };
+    const element = resolveElement(node, context);
+    const childContext = createChildContext(element, context);
+
+    return element.kind === "native"
+      ? renderNativeElement(element, childContext)
+      : renderComponentElement(element, childContext);
+  }
+
+  function resolveElement(node: ElementNode, context: RenderContext): ResolvedElement {
     const ownProps = resolveProps(node, context.renderData);
     const transformed = applyNodeTransforms(
       transformNode,
-      node as ComarkElementNode,
+      node,
       ownProps,
       context.renderData,
-      context.parent as ComarkElementNode | undefined,
+      context.parent,
     );
-    const element: ElementNode = {
-      tag: transformed?.tag ?? nodeTag,
+
+    const element: BaseElement = {
       node,
-      props: transformed?.props ?? ownProps,
-      hasTransformedProps: transformed !== undefined && transformed.props !== ownProps,
+      ownProps,
+      transformed,
     };
 
-    // preタグ内の要素はそのまま表示する。直接の子だけでなく、
-    // 祖先のどこかに pre があれば子孫すべてが対象になる
-    const isInPre =
+    // preタグ内の要素はそのまま表示する。
+    const inPre =
       context.inPre || (context.parent !== undefined && getTag(context.parent) === "pre");
-    const component = isInPre ? null : resolveComponent(element, components);
-    const innerContext: LocalContext = { ...context, inPre: isInPre || element.tag === "pre" };
+    if (inPre) {
+      return {
+        kind: "native",
+        ...element,
+      };
+    }
 
-    return component
-      ? renderCustomComponent(component, innerContext)
-      : renderNativeElement(element, innerContext);
+    const component = resolveComponent(element, components);
+    if (component) {
+      return {
+        kind: "component",
+        component,
+        ...element,
+      };
+    }
+
+    return {
+      kind: "native",
+      ...element,
+    };
   }
 
-  function renderCustomComponent(element: ComponentNode, context: LocalContext) {
-    const { component, node } = element;
-    const props = element.props;
-    const childRenderData = scopeRenderData(
-      node,
-      props,
-      context.renderData,
-      element.hasTransformedProps,
-    );
+  function createChildContext(element: ResolvedElement, context: RenderContext) {
+    const childInPre = context.inPre || getElementTag(element) === "pre";
 
-    const slots = partitionIntoSlots(node, childRenderData, context.inPre);
-    const CustomComponent = dynamic(() => component);
+    const { transformed, ownProps } = element;
+    const hasTransformedProps = transformed !== undefined && transformed.props !== ownProps;
+
+    const shouldInheritRenderData =
+      !hasTransformedProps &&
+      Object.keys(ownProps).length === 1 &&
+      Object.hasOwn(ownProps, METADATA_ATTRIBUTES_KEY);
+
+    const { renderData } = context;
+    const childRenderData = shouldInheritRenderData
+      ? renderData
+      : {
+          get frontmatter() {
+            return renderData.frontmatter;
+          },
+          get meta() {
+            return renderData.meta;
+          },
+          get data() {
+            return renderData.data;
+          },
+          props: getElementProps(element),
+        };
+
+    return {
+      parent: element.node,
+      renderData: childRenderData,
+      inPre: childInPre,
+    };
+  }
+
+  function renderNativeElement(element: NativeElement, childContext: RenderContext) {
+    const tag = getElementTag(element);
+    const props = getElementProps(element);
+    const { node } = element;
+
+    const nativeAttributes = toNativeAttributes(tag, node, props);
+
+    const NativeTag = dynamic(() => tag);
+
+    if (isHtmlVoidElement(tag)) {
+      const voidAttributes = omit(nativeAttributes, "children");
+      return <NativeTag {...voidAttributes} />;
+    }
+
+    const children = getChildren(node)
+      .filter((child) => !getSlotName(child))
+      .map((child) => renderNode(child, childContext))
+      .filter(Boolean);
+
+    return <NativeTag {...nativeAttributes}>{children}</NativeTag>;
+  }
+
+  function renderComponentElement(element: ComponentElement, childContext: RenderContext) {
+    const slots = renderSlots(element.node, childContext);
+    const CustomComponent = dynamic(() => element.component);
 
     return (
       // Loadingで囲うことで、CustomComponent内の非同期値の表示が外部に影響しないようにする
       // CustomComponent内で既にLoadingでラップされている場合、
       // 読込中は内側のLoading.fallbackが表示されるので、このケースでもいい感じに動作する
       <Loading fallback={null}>
-        <CustomComponent {...props} {...slots} />
+        <CustomComponent {...getElementProps(element)} {...slots} />
       </Loading>
     );
   }
 
-  function renderNativeElement(element: ElementNode, context: LocalContext) {
-    const { tag, node } = element;
-    const resolved = element.props;
-    const props = toNativeAttributes(tag, node, resolved);
-    const renderData = scopeRenderData(
-      node,
-      resolved,
-      context.renderData,
-      element.hasTransformedProps,
-    );
-    const Component = dynamic(() => tag);
-
-    if (isHtmlVoidElement(tag)) {
-      const { children: _children, ...voidProps } = props;
-      return <Component {...voidProps} />;
-    }
-
-    const children = getChildren(node)
-      .filter((child) => !getSlotName(child))
-      .map((child) => renderNode(child, { parent: node, renderData, inPre: context.inPre }))
-      .filter(Boolean);
-
-    return <Component {...props}>{children}</Component>;
-  }
-
-  function partitionIntoSlots(
-    node: Node,
-    childRenderData: NodeRenderData,
-    inPre: boolean,
-  ): Record<string, JSX.Element[]> {
+  function renderSlots(node: Node, context: RenderContext): Record<string, JSX.Element[]> {
     const defaultSlot: JSX.Element[] = [];
     const namedSlots: Record<string, JSX.Element[]> = {};
 
@@ -264,16 +298,14 @@ function createNodeRenderer(
       if (slotName) {
         const propName = getSlotPropName(slotName);
         namedSlots[propName] = getChildren(child)
-          .map((slotChild) =>
-            renderNode(slotChild, { parent: node, renderData: childRenderData, inPre }),
-          )
+          .map((slotChild) => renderNode(slotChild, context))
           .filter(Boolean);
 
         continue;
       }
 
       // default slot
-      const rendered = renderNode(child, { parent: node, renderData: childRenderData, inPre });
+      const rendered = renderNode(child, context);
       if (rendered) {
         defaultSlot.push(rendered);
       }
@@ -285,6 +317,7 @@ function createNodeRenderer(
 
   return renderNode;
 }
+
 /**
  * Renders a parsed Markdown document using Solid components.
 
@@ -315,45 +348,34 @@ export const MarkdownDocument: Component<MarkdownDocumentProps> = (_props) => {
 
   const renderNode = createMemo(() => createNodeRenderer(props.components, props.transformNode));
 
-  const renderData = createMemo<NodeRenderData>(
-    () => ({
-      frontmatter: props.value.frontmatter,
-      meta: props.value.meta,
-      data: props.data,
-      props: {},
-    }),
-    {
-      equals: (prev, next) =>
-        prev.frontmatter === next.frontmatter && prev.meta === next.meta && prev.data === next.data,
+  const frontmatter = createMemo(() => props.value.frontmatter);
+  const meta = createMemo(() => props.value.meta);
+
+  const renderData: NodeRenderData = {
+    get frontmatter() {
+      return frontmatter();
     },
-  );
+    get meta() {
+      return meta();
+    },
+    get data() {
+      return props.data;
+    },
+    props: {},
+  };
 
   const renderedNodes = createMemo(() => {
-    if (!props.streaming) {
-      const render = renderNode();
-      const context = {
-        parent: undefined,
-        renderData: renderData(),
-      };
+    const context = {
+      parent: undefined,
+      renderData,
+      inPre: false,
+    };
 
-      return props.value.nodes.map((node) => render(node, context)).filter(Boolean);
+    if (!props.streaming) {
+      return props.value.nodes.map((node) => renderNode()(node, context)).filter(Boolean);
     }
 
-    return (
-      <For each={props.value.nodes}>
-        {(node) => (
-          <>
-            {renderNode()(node, {
-              parent: undefined,
-              renderData:
-                !!props.transformNode || hasDynamicAttributes(node)
-                  ? renderData()
-                  : untrack(renderData),
-            })}
-          </>
-        )}
-      </For>
-    );
+    return <For each={props.value.nodes}>{(node) => <>{renderNode()(node, context)}</>}</For>;
   });
 
   return (

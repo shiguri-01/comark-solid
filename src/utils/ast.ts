@@ -1,4 +1,4 @@
-import type { Node } from "comark";
+import type { ElementNode, Node } from "comark";
 
 export function getTag(node: Node): string | null {
   if (Array.isArray(node) && node.length >= 1 && typeof node[0] === "string") {
@@ -22,4 +22,8 @@ export function getChildren(node: Node): Node[] {
   }
 
   return [];
+}
+
+export function isElementNode(node: Node): node is ElementNode {
+  return Array.isArray(node) && node.length >= 1 && typeof node[0] === "string";
 }
