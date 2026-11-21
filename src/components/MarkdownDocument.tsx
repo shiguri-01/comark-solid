@@ -364,18 +364,19 @@ export const MarkdownDocument: Component<MarkdownDocumentProps> = (_props) => {
     props: {},
   };
 
-  const renderedNodes = createMemo(() => {
-    const context = {
-      parent: undefined,
-      renderData,
-      inPre: false,
-    };
+  const context = {
+    parent: undefined,
+    renderData,
+    inPre: false,
+  };
 
-    if (!props.streaming) {
-      return props.value.nodes.map((node) => renderNode()(node, context)).filter(Boolean);
+  const renderedNodes = createMemo(() => {
+    if (props.streaming) {
+      return <For each={props.value.nodes}>{(node) => <>{renderNode()(node, context)}</>}</For>;
     }
 
-    return <For each={props.value.nodes}>{(node) => <>{renderNode()(node, context)}</>}</For>;
+    const render = renderNode();
+    return props.value.nodes.map((node) => render(node, context)).filter(Boolean);
   });
 
   return (
