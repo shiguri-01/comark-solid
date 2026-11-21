@@ -218,11 +218,11 @@ function createNodeRenderer(
 
     const { transformed, ownProps } = element;
     const hasTransformedProps = transformed !== undefined && transformed.props !== ownProps;
+    const hasExplicitAttributes = Object.keys(getAttributes(element.node)).some(
+      (key) => key !== METADATA_ATTRIBUTES_KEY,
+    );
 
-    const shouldInheritRenderData =
-      !hasTransformedProps &&
-      Object.keys(ownProps).length === 1 &&
-      Object.hasOwn(ownProps, METADATA_ATTRIBUTES_KEY);
+    const shouldInheritRenderData = !hasTransformedProps && !hasExplicitAttributes;
 
     const { renderData } = context;
     const childRenderData = shouldInheritRenderData
