@@ -98,16 +98,16 @@ function getElementProps(element: BaseElement): Record<string, unknown> {
 }
 
 function getElementTag(element: BaseElement): string {
-  return element.transformed?.tag ?? element.node[0];
+  return element.transformed?.tag ?? getTag(element.node);
 }
 
-function resolveProps(node: Node, renderData: NodeRenderData) {
+function resolveProps(node: ElementNode, renderData: NodeRenderData) {
   return resolveAttributes(getAttributes(node), renderData, { parseJson: true });
 }
 
 const METADATA_ATTRIBUTES_KEY = "$";
 
-function getSlotName(node: Node): string | null {
+function getSlotName(node: ElementNode): string | null {
   if (getTag(node) !== "template") {
     return null;
   }
@@ -262,7 +262,7 @@ function createNodeRenderer(
     }
 
     const children = getChildren(node)
-      .filter((child) => !getSlotName(child))
+      .filter((child) => !isElementNode(child) || !getSlotName(child))
       .map((child) => renderNode(child, childContext))
       .filter(Boolean);
 
@@ -283,7 +283,7 @@ function createNodeRenderer(
     );
   }
 
-  function renderSlots(node: Node, context: RenderContext): Record<string, JSX.Element[]> {
+  function renderSlots(node: ElementNode, context: RenderContext): Record<string, JSX.Element[]> {
     const defaultSlot: JSX.Element[] = [];
     const namedSlots: Record<string, JSX.Element[]> = {};
 
@@ -292,16 +292,16 @@ function createNodeRenderer(
         continue;
       }
 
-      const slotName = getSlotName(child);
+      if (isElementNode(child)) {
+        const slotName = getSlotName(child);
+        if (slotName) {
+          const propName = getSlotPropName(slotName);
+          namedSlots[propName] = getChildren(child)
+            .map((slotChild) => renderNode(slotChild, context))
+            .filter(Boolean);
 
-      // named slot
-      if (slotName) {
-        const propName = getSlotPropName(slotName);
-        namedSlots[propName] = getChildren(child)
-          .map((slotChild) => renderNode(slotChild, context))
-          .filter(Boolean);
-
-        continue;
+          continue;
+        }
       }
 
       // default slot
