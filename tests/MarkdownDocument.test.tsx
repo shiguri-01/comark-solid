@@ -315,7 +315,7 @@ it("renders updates across streaming mode changes", () => {
   );
 });
 
-it("renders surrounding content while a lazy component loads", async () => {
+it("shows the outer fallback while a lazy component loads", async () => {
   let release!: () => void;
   const pending = new Promise<void>((resolve) => {
     release = resolve;
@@ -332,9 +332,7 @@ it("renders surrounding content while a lazy component loads", async () => {
   ));
 
   try {
-    expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
-      `"<div class="comark-content"><p>Ready</p></div>"`,
-    );
+    expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(`"<p>Outer fallback</p>"`);
   } finally {
     release();
   }
