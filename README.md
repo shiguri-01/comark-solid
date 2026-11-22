@@ -97,15 +97,9 @@ export default function App() {
 }
 ```
 
-Components can also be loaded asynchronously using Solid's `lazy()`:
-
-```tsx
-import { lazy } from "solid-js";
-
-const components = {
-  chart: lazy(() => import("./Chart")),
-};
-```
+Place `<Loading>` around async content inside a custom component to keep the surrounding Markdown
+visible. Wrap the document in `<Loading>` for a shared fallback.
+Components can also be loaded on demand with `lazy()`.
 
 ## Component bindings
 

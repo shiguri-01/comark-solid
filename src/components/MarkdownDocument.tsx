@@ -13,15 +13,7 @@ import {
   resolveAttributes,
   toNativeAttributes,
 } from "comark/utils";
-import {
-  createMemo,
-  merge,
-  Loading,
-  type Component,
-  type ValidComponent,
-  omit,
-  For,
-} from "solid-js";
+import { createMemo, merge, type Component, type ValidComponent, omit, For } from "solid-js";
 
 import { getAttributes, getChildren, getTag, isElementNode } from "../utils/ast";
 
@@ -273,14 +265,7 @@ function createNodeRenderer(
     const slots = renderSlots(element.node, childContext);
     const CustomComponent = dynamic(() => element.component);
 
-    return (
-      // Loadingで囲うことで、CustomComponent内の非同期値の表示が外部に影響しないようにする
-      // CustomComponent内で既にLoadingでラップされている場合、
-      // 読込中は内側のLoading.fallbackが表示されるので、このケースでもいい感じに動作する
-      <Loading fallback={null}>
-        <CustomComponent {...getElementProps(element)} {...slots} />
-      </Loading>
-    );
+    return <CustomComponent {...getElementProps(element)} {...slots} />;
   }
 
   function renderSlots(node: ElementNode, context: RenderContext): Record<string, JSX.Element[]> {
