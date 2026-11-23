@@ -11,8 +11,3 @@ peerDependencyRules:
     - vitest
   allowedVersions:
     vitest: "*"
-
-minimumReleaseAgeExclude:
-  - solid-js
-  - "@solidjs/*"
-  - eslint-plugin-solid@0.18.0
