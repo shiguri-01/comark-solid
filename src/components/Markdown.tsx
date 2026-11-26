@@ -55,10 +55,18 @@ export const Markdown: Component<MarkdownProps> = (_props) => {
   const props = merge({ components: {}, data: {}, streaming: false }, _props);
   const rest = omit(props, "value", "options", "streaming");
 
-  const parse = createMemo(() => createSerializedMarkdownParser(props.options));
+  const parse = createMemo(() => {
+    const options = props.options;
+    let parser: ReturnType<typeof createSerializedMarkdownParser> | undefined;
+
+    return (value: string, streaming: boolean) => {
+      parser ??= createSerializedMarkdownParser(options);
+      return parser(value, { streaming });
+    };
+  });
   const document = createMemo(() => {
     const value = props.value;
-    return isMarkdownDocument(value) ? value : parse()(value, { streaming: props.streaming });
+    return isMarkdownDocument(value) ? value : parse()(value, props.streaming);
   });
 
   return <MarkdownDocument value={document()} streaming={props.streaming} {...rest} />;
