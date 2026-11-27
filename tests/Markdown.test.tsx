@@ -1,6 +1,6 @@
 import { render, screen } from "@solidjs/testing-library";
 import type { JSX } from "@solidjs/web";
-import { parseMarkdown, type NodeTransform } from "comark";
+import { parseMarkdown, type MarkdownDocument, type NodeTransform } from "comark";
 import { Markdown } from "comark-solid";
 import { createSignal, flush, Loading } from "solid-js";
 import { expect, it, vi } from "vite-plus/test";
@@ -46,7 +46,8 @@ it("passes render transforms and components through the string entry point", asy
 });
 
 it("updates the rendered Markdown as source and parser options change", async () => {
-  const [source, setSource] = createSignal("# Before");
+  const document = await parseMarkdown("# Parsed");
+  const [source, setSource] = createSignal<string | MarkdownDocument>("# Before");
   const [headingIds, setHeadingIds] = createSignal(true);
   const { container } = render(() => (
     <Loading fallback={null}>
@@ -60,20 +61,25 @@ it("updates the rendered Markdown as source and parser options change", async ()
   setHeadingIds(false);
   await vi.waitFor(() => expect(screen.getByRole("heading", { name: "Before" }).id).toBe(""));
 
+  setSource(document);
+  await screen.findByRole("heading", { name: "Parsed" });
+
+  setHeadingIds(true);
+  flush();
   setSource("# After");
-  await screen.findByRole("heading", { name: "After" });
+  expect(await screen.findByRole("heading", { name: "After" })).toHaveAttribute("id", "after");
   expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
-    `"<div class="comark-content"><h1>After</h1></div>"`,
+    `"<div class="comark-content"><h1 id="after">After</h1></div>"`,
   );
 });
 
-it("renders a parsed document synchronously, with runtime data and without calling the parser", async () => {
+it("renders a parsed document synchronously with runtime data and without initializing the parser", async () => {
   const document = await parseMarkdown(':badge{:name="data.name"}');
-  const pre = vi.fn();
+  const initializeTokenizer = vi.fn();
   const { container } = render(() => (
     <Markdown
       value={document}
-      options={{ plugins: [{ name: "observe-parse", pre }] }}
+      options={{ plugins: [{ name: "observe-parser", markdownItPlugins: [initializeTokenizer] }] }}
       data={{ name: "Ada" }}
       components={{ Badge: (props: { name: string }) => <strong>{props.name}</strong> }}
     />
@@ -82,7 +88,7 @@ it("renders a parsed document synchronously, with runtime data and without calli
   expect(container.firstElementChild?.outerHTML).toMatchInlineSnapshot(
     `"<div class="comark-content"><strong>Ada</strong></div>"`,
   );
-  expect(pre).not.toHaveBeenCalled();
+  expect(initializeTokenizer).not.toHaveBeenCalled();
 });
 
 it("keeps a shared AST block mounted for a parsed-document append in streaming mode", async () => {
