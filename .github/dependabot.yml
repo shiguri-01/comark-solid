@@ -20,12 +20,19 @@ updates:
       # Group by update type, not dependency type: pnpm catalog entries
       # (vite-plus, vitest, ...) are reported as production dependencies,
       # so a development-only group would miss them.
-      minor-and-patch:
+      # The groups stay separate because only the patch group is
+      # auto-merged (see dependabot-auto-merge.yml); minor updates are
+      # reviewed manually, and major updates are not grouped at all.
+      patch:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      minor:
         patterns:
           - "*"
         update-types:
           - "minor"
-          - "patch"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
